@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { collection, addDoc, writeBatch, getDocs, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
-import { DEFAULT_INSURANCE_COMPANIES, CATEGORY_COLORS } from '../config/insuranceCompanies';
+import { CATEGORY_COLORS } from '../config/insuranceCompanies';
 
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -19,14 +19,12 @@ import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 import Skeleton from '@mui/material/Skeleton';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
 
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
-import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 
 const InsuranceCompaniesManager = () => {
   const [companies,   setCompanies]   = useState([]);
@@ -35,7 +33,6 @@ const InsuranceCompaniesManager = () => {
   const [editId,      setEditId]      = useState(null);
   const [form,        setForm]        = useState({ name:'', email:'', category:'' });
   const [saving,      setSaving]      = useState(false);
-  const [importing,   setImporting]   = useState(false);
   const [filterCat,   setFilterCat]   = useState('all');
   const [search,      setSearch]      = useState('');
   const [toast,       setToast]       = useState({ open:false, msg:'', severity:'success' });
@@ -78,24 +75,6 @@ const InsuranceCompaniesManager = () => {
     setToast({ open:true, msg:`${name} removed.`, severity:'info' });
   };
 
-  const handleImportDefaults = async () => {
-    if (!window.confirm(`This will add ${DEFAULT_INSURANCE_COMPANIES.length} default company contacts. Continue?`)) return;
-    setImporting(true);
-    try {
-      // Write in batches of 500 (Firestore limit)
-      for (let i = 0; i < DEFAULT_INSURANCE_COMPANIES.length; i += 490) {
-        const batch = writeBatch(db);
-        DEFAULT_INSURANCE_COMPANIES.slice(i, i+490).forEach(co => {
-          batch.set(doc(collection(db,'insurance_companies')), { ...co, created_at:serverTimestamp() });
-        });
-        await batch.commit();
-      }
-      setToast({ open:true, msg:`${DEFAULT_INSURANCE_COMPANIES.length} companies imported successfully!`, severity:'success' });
-      load();
-    } catch (err) { setToast({ open:true, msg:err.message, severity:'error' }); }
-    setImporting(false);
-  };
-
   // All unique categories that actually exist in the data
   const allCategories = [...new Set(companies.map(c => c.category || '').filter(Boolean))].sort();
 
@@ -118,12 +97,6 @@ const InsuranceCompaniesManager = () => {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
-          <Button variant="outlined" size="small"
-            startIcon={importing ? <CircularProgress size={13} color="inherit" /> : <FileDownloadOutlinedIcon />}
-            onClick={handleImportDefaults} disabled={importing}
-            sx={{ fontSize:12, borderColor:'rgba(99,102,241,0.35)', color:'#6366f1' }}>
-            {importing ? 'Importing…' : 'Import Defaults'}
-          </Button>
           <Button variant="contained" size="small" startIcon={<AddIcon />}
             onClick={() => { setForm({ name:'', email:'', category:'' }); setAddOpen(true); }}>
             Add Company
@@ -159,7 +132,7 @@ const InsuranceCompaniesManager = () => {
         <Box sx={{ textAlign:'center', py:5 }}>
           <BusinessOutlinedIcon sx={{ fontSize:40, color:'rgba(37,94,171,0.2)', mb:1 }} />
           <Typography sx={{ color:'#9CA3AF' }}>
-            {companies.length === 0 ? 'No companies yet — click "Import Defaults" above.' : 'No results for this filter.'}
+            {companies.length === 0 ? 'No companies yet — click "Add Company" to add your insurer contacts.' : 'No results for this filter.'}
           </Typography>
         </Box>
       ) : (
