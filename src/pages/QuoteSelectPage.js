@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
-import { db, auth } from '../firebase';
+import { db, ensureAnonymousUser } from '../firebase';
 
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -29,7 +28,7 @@ const QuoteSelectPage = () => {
 
   useEffect(() => {
     if (!qid || !companyId) { setError('Invalid link — missing parameters.'); setLoading(false); return; }
-    signInAnonymously(auth)
+    ensureAnonymousUser()
       .catch(() => {})
       .finally(() => {
         getDoc(doc(db, 'quotes', qid))

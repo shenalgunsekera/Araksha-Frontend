@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
-import { db, auth } from '../firebase';
+import { db, ensureAnonymousUser } from '../firebase';
 import { PRODUCTS } from '../config/products';
 import { generateComparisonPdf } from '../utils/comparisonPdf';
 import Box from '@mui/material/Box';
@@ -21,7 +20,7 @@ const ComparisonPdfPage = () => {
 
   useEffect(() => {
     if (!qid) { setError('Invalid link — missing quote ID.'); setStatus('error'); return; }
-    signInAnonymously(auth)
+    ensureAnonymousUser()
       .catch(() => {})
       .finally(() => {
         getDoc(doc(db, 'quotes', qid))

@@ -4,8 +4,7 @@ import {
   doc, getDoc, updateDoc, arrayUnion, serverTimestamp,
   collection, addDoc, getDocs, query, where,
 } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
-import { db, auth } from '../firebase';
+import { db, ensureAnonymousUser } from '../firebase';
 import { uploadFile as uploadToCloudinary, openFile } from '../storage';
 import { PRODUCTS } from '../config/products';
 
@@ -173,7 +172,7 @@ const QuoteResponsePage = () => {
 
   useEffect(() => {
     if (!qid) { setError('Invalid link — missing quote ID.'); setLoading(false); return; }
-    signInAnonymously(auth)
+    ensureAnonymousUser()
       .catch(() => {})
       .finally(() => {
         getDoc(doc(db, 'quotes', qid))

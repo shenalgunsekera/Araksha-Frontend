@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, setPersistence } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { auth, db, browserSessionPersistence } from '../firebase';
 import { useAuth } from '../App';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -49,6 +49,8 @@ const LoginPage = () => {
     setLoading(true);
     setError('');
     try {
+      // Staff sessions are session-only: logged out when the tab closes
+      await setPersistence(auth, browserSessionPersistence).catch(() => {});
       const cred = await signInWithEmailAndPassword(auth, email, password);
       setUser(cred.user);
       const snap = await getDoc(doc(db, 'users', cred.user.uid));

@@ -13,7 +13,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { onAuthStateChanged } from 'firebase/auth';
 import { setActiveWorkSession, closeActiveWorkSession, logoutWithSessionClose } from './utils/workSession';
-import { doc, getDoc, getDocFromServer, setDoc, addDoc, updateDoc, collection, getDocs, limit, query, where, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer, setDoc, addDoc, collection, getDocs, limit, query, where, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { getOrCreateDeviceId, collectDeviceInfo, fetchLocationInfo } from './utils/deviceFingerprint';
 import { PRODUCTS, DEFAULT_MODULE_ACCESS } from './config/products';
@@ -270,47 +270,50 @@ function RequireAuth({ children }) {
       const devId     = await getOrCreateDeviceId();
       setDeviceId(devId);
       const sessionId = `${user.uid}_${devId}`;
+      const sessRef   = doc(db, 'device_sessions', sessionId);
 
-      // Fire-and-forget registration
+      // Server-authoritative access check FIRST (cache fallback, then fail-open
+      // so a network hiccup never locks anyone out).
+      let initSess = { approved: false, blocked: false };
+      let initSett = { lockdown_mode: false };
+      let sessionKnownToExist = false;
+      try {
+        const [sessSnap, settSnap] = await Promise.all([
+          getDocFromServer(sessRef).catch(() => getDoc(sessRef)),
+          getDocFromServer(doc(db, 'settings', 'device_control'))
+            .catch(() => getDoc(doc(db, 'settings', 'device_control'))),
+        ]);
+        if (sessSnap.exists()) { initSess = sessSnap.data(); sessionKnownToExist = true; }
+        if (settSnap.exists()) initSett = settSnap.data();
+      } catch (_) {
+        // Offline / unreachable — default to allowing so we don't lock out users.
+        // Treat the session as existing so the registration write below cannot
+        // stamp first_seen over an unknown doc state.
+        sessionKnownToExist = true;
+      }
+      if (cancelled) return;
+
+      // Fire-and-forget registration — a MERGE-ONLY metadata write.
+      // It never writes `approved`/`blocked`, so an admin's approval can never
+      // be reset by a client glitch, race, or stale cache. A brand-new session
+      // doc simply has no `approved` field, which the gate and the Devices
+      // manager both treat as "pending".
       (async () => {
         try {
           const deviceInfo = collectDeviceInfo();
-          const ref  = doc(db, 'device_sessions', sessionId);
-          const snap = await getDoc(ref);
-          const loc  = snap.exists() && snap.data().ip ? null : await fetchLocationInfo();
-          const safeInfo = {
+          const loc = sessionKnownToExist && initSess.ip ? null : await fetchLocationInfo();
+          await setDoc(sessRef, {
             device_id:  devId,
             user_id:    user.uid,
             user_email: user.email || '',
             user_name:  userProfileRef.current?.full_name || user.displayName || user.email?.split('@')[0] || '',
             ...deviceInfo,
             ...(loc || {}),
+            ...(sessionKnownToExist ? {} : { first_seen: serverTimestamp() }),
             last_seen: serverTimestamp(),
-          };
-          if (!snap.exists()) {
-            // First time this device logs in — create with default status fields
-            await setDoc(ref, { ...safeInfo, first_seen: serverTimestamp(), approved: false, blocked: false });
-          } else {
-            // Device already known — only update safe metadata, never touch approved/blocked
-            await updateDoc(ref, safeInfo);
-          }
+          }, { merge: true });
         } catch (_) { }
       })();
-
-      // Server-authoritative initial access check — bypasses stale local cache
-      let initSess = { approved: false, blocked: false };
-      let initSett = { lockdown_mode: false };
-      try {
-        const [sessSnap, settSnap] = await Promise.all([
-          getDocFromServer(doc(db, 'device_sessions', sessionId)),
-          getDocFromServer(doc(db, 'settings', 'device_control')),
-        ]);
-        if (sessSnap.exists()) initSess = sessSnap.data();
-        if (settSnap.exists()) initSett = settSnap.data();
-      } catch (_) {
-        // Offline / unreachable — default to allowing so we don't lock out users
-      }
-      if (cancelled) return;
 
       if (initSess.blocked) { logoutWithSessionClose(auth); setDeviceState('restricted'); return; }
 
