@@ -5,6 +5,7 @@ import {
   doc, updateDoc, deleteDoc, serverTimestamp, writeBatch
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { confirmTypedDelete } from '../utils/confirmDelete';
 import { useAuth } from '../App';
 import { PRODUCTS as STATIC_PRODUCTS } from '../config/products';
 import { COUNTRIES } from '../config/countries';
@@ -974,6 +975,7 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
   // Remove a single insurer's response from this comparison (persisted).
   const deleteResponse = async () => {
     if (!deleteResp) return;
+    if (!confirmTypedDelete(`Remove ${deleteResp.company_name || 'this insurer'}'s quote response?`)) { setDeleteResp(null); return; }
     setDeletingResp(true);
     try {
       const snap = await getDoc(doc(db, 'quotes', quote.id));
@@ -2354,6 +2356,7 @@ const QuotationsPage = () => {
 
   const handleDeleteQuote = async () => {
     if (!deleteTarget) return;
+    if (!confirmTypedDelete(`Delete quote ${deleteTarget.reference || ''}? All its responses will be lost.`)) return;
     setDeleting(true);
     try {
       await deleteDoc(doc(db, 'quotes', deleteTarget.id));

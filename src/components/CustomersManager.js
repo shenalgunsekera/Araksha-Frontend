@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
+import { confirmTypedDelete } from '../utils/confirmDelete';
 import { useAuth } from '../App';
 
 import Box from '@mui/material/Box';
@@ -43,7 +44,6 @@ const CustomersManager = () => {
   const [filter,    setFilter]    = useState('all');
   const [search,    setSearch]    = useState('');
   const [busyId,    setBusyId]    = useState('');
-  const [confirmDel, setConfirmDel] = useState(null);
   const [toast,     setToast]     = useState({ open: false, msg: '', severity: 'success' });
 
   useEffect(() => {
@@ -77,6 +77,7 @@ const CustomersManager = () => {
   };
 
   const remove = async (c) => {
+    if (!confirmTypedDelete(`Delete customer "${c.full_name || c.phone}"? Their profile and access will be removed.`)) return;
     setBusyId(c.id);
     try {
       await deleteDoc(doc(db, 'customers', c.id));
@@ -85,7 +86,6 @@ const CustomersManager = () => {
       setToast({ open: true, msg: err.message, severity: 'error' });
     }
     setBusyId('');
-    setConfirmDel(null);
   };
 
   const filtered = customers.filter(c => {
@@ -192,24 +192,13 @@ const CustomersManager = () => {
                   ✓ Verify Phone
                 </Button>
               ))}
-              {canDelete && (confirmDel === c.id ? (
-                <>
-                  <Button size="small" color="error" variant="contained" disabled={busyId === c.id}
-                    onClick={() => remove(c)} sx={{ fontSize: 11.5, boxShadow: 'none' }}>
-                    Confirm Delete
-                  </Button>
-                  <Button size="small" variant="outlined" onClick={() => setConfirmDel(null)}
-                    sx={{ fontSize: 11.5, borderColor: '#e0e0e0', color: '#6B7280' }}>
-                    Cancel
-                  </Button>
-                </>
-              ) : (
-                <Button size="small" color="error" variant="outlined"
-                  onClick={() => setConfirmDel(c.id)}
+              {canDelete && (
+                <Button size="small" color="error" variant="outlined" disabled={busyId === c.id}
+                  onClick={() => remove(c)}
                   sx={{ fontSize: 11.5, borderColor: 'rgba(239,68,68,0.3)', color: '#ef4444' }}>
                   Delete
                 </Button>
-              ))}
+              )}
             </Stack>
           </Card>
         ))

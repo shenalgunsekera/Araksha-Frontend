@@ -4,6 +4,7 @@ import {
   query, orderBy, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { confirmTypedDelete } from '../utils/confirmDelete';
 import { useAuth } from '../App';
 import { useNavigate } from 'react-router-dom';
 import ExcelJS from 'exceljs';
@@ -738,6 +739,7 @@ const AdminPanel = () => {
   };
 
   const deleteTicket = async (id) => {
+    if (!confirmTypedDelete('Delete this support ticket?')) return;
     await deleteDoc(doc(db, 'tickets', id));
     setTickets(prev => prev.filter(t => t.id !== id));
     setToast({ open: true, msg: 'Ticket deleted.', severity: 'info' });

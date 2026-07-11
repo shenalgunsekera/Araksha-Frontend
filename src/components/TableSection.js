@@ -4,6 +4,7 @@ import {
   collection, getDocs, deleteDoc, doc, query, orderBy, writeBatch, updateDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { confirmTypedDelete } from '../utils/confirmDelete';
 import { useAuth } from '../App';
 import { uploadFile as uploadToCloudinary } from '../storage';
 import AddClientForm, { textFields as UW_FIELDS } from './AddClientForm';
@@ -515,6 +516,7 @@ const TableSection = () => {
   /* delete single */
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    if (!confirmTypedDelete('Delete this client and their records?')) return;
     try {
       await deleteDoc(doc(db, 'clients', deleteTarget.id));
       toast('Client deleted');

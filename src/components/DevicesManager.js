@@ -4,6 +4,7 @@ import {
   updateDoc, deleteDoc, setDoc, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { confirmTypedDelete } from '../utils/confirmDelete';
 import { useAuth } from '../App';
 import { getOrCreateDeviceId } from '../utils/deviceFingerprint';
 
@@ -231,6 +232,7 @@ export default function DevicesManager() {
   };
 
   const remove = async (id) => {
+    if (!confirmTypedDelete('Remove this device session? The user will need approval again to log in from that device.')) return;
     await deleteDoc(doc(db, 'device_sessions', id));
   };
 

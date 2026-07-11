@@ -3,6 +3,7 @@ import {
   collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { confirmTypedDelete } from '../utils/confirmDelete';
 import { useAuth } from '../App';
 import { PRODUCTS } from '../config/products';
 import { parseAutoCalc, buildAutoCalc, describeAutoCalc } from '../utils/autoCalc';
@@ -353,6 +354,7 @@ const ProductsManager = () => {
 
   const handleDelete = async () => {
     if (!deleteTgt) return;
+    if (!confirmTypedDelete(`Delete the product "${deleteTgt.label || deleteTgt.key}"?`)) { setDeleteTgt(null); return; }
     try {
       await deleteDoc(doc(db, 'products', deleteTgt.key));
       toast('Product deleted');

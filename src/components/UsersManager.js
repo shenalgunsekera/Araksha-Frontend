@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, doc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
+import { confirmTypedDelete } from '../utils/confirmDelete';
 
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -93,6 +94,7 @@ const UsersManager = ({ currentUserId, isAdmin }) => {
   };
 
   const confirmDelete = async () => {
+    if (!confirmTypedDelete(`Remove the staff account "${deleteDlg.userName}"?`)) return;
     setSaving(true);
     try {
       await deleteDoc(doc(db, 'users', deleteDlg.userId));

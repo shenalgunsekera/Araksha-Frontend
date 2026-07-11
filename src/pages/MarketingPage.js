@@ -4,6 +4,7 @@ import {
   query, orderBy, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { confirmTypedDelete } from '../utils/confirmDelete';
 import { useAuth } from '../App';
 import { API_URL } from '../config';
 
@@ -202,6 +203,7 @@ const MarketingPage = () => {
   };
 
   const deleteTpl = async (id) => {
+    if (!confirmTypedDelete('Delete this marketing template?')) return;
     await deleteDoc(doc(db, 'marketing_templates', id));
     setTemplates(prev => prev.filter(t => t.id !== id));
     showToast('Template deleted.', 'info');

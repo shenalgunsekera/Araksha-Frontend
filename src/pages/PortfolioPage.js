@@ -4,6 +4,7 @@ import {
   doc, updateDoc, deleteDoc, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { confirmTypedDelete } from '../utils/confirmDelete';
 import { useAuth } from '../App';
 import emailjs from '@emailjs/browser';
 
@@ -968,6 +969,7 @@ function SavedReviews({ onEdit }) {
   });
 
   const handleDelete = async (id) => {
+    if (!confirmTypedDelete('Delete this saved portfolio review?')) return;
     setDeleting(id);
     try { await deleteDoc(doc(db, 'portfolio_assessments', id)); }
     catch { setToast({ open:true, msg:'Delete failed', sev:'error' }); }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { collection, getDocs, query, orderBy, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
+import { confirmTypedDelete } from '../utils/confirmDelete';
 import { textFields as UW_FIELDS } from './AddClientForm';
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
@@ -1026,7 +1027,7 @@ const ReportsPage = () => {
     setSavingTpl(false);
   };
 
-  const handleDelTpl = async(id)=>{ await deleteDoc(doc(db,'report_templates',id)); setSavedTemplates(p=>p.filter(t=>t.id!==id)); showToast('Template deleted.','info'); };
+  const handleDelTpl = async(id)=>{ if (!confirmTypedDelete('Delete this saved report template?')) return; await deleteDoc(doc(db,'report_templates',id)); setSavedTemplates(p=>p.filter(t=>t.id!==id)); showToast('Template deleted.','info'); };
 
   // displayCols for the flat/subtotals/aggregated table
   const displayCols = useMemo(()=>{
