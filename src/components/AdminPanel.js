@@ -21,6 +21,7 @@ import DevicesManager from './DevicesManager';
 import UsersManager from './UsersManager';
 import ProductsManager from './ProductsManager';
 import CustomersManager from './CustomersManager';
+import MarketersManager from './MarketersManager';
 
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -50,6 +51,7 @@ import BackupOutlinedIcon from '@mui/icons-material/BackupOutlined';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import GroupAddOutlinedIcon from '@mui/icons-material/GroupAddOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
+import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -968,6 +970,7 @@ const AdminPanel = () => {
         <Tab icon={<AccessTimeIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Work Hours" />
         <Tab icon={<CategoryOutlinedIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Products" />
         <Tab icon={<PeopleAltOutlinedIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Customers" />
+        <Tab icon={<CampaignOutlinedIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Marketers" />
       </Tabs>
 
       {/* ── TICKETS TAB ── */}
@@ -1348,6 +1351,9 @@ const AdminPanel = () => {
 
       {/* ── WEBSITE CUSTOMERS TAB ── */}
       {tab === 10 && <CustomersManager />}
+
+      {/* ── MARKETERS TAB ── */}
+      {tab === 11 && <MarketersManager />}
 
       <Snackbar open={toast.open} autoHideDuration={3000} onClose={() => setToast(t => ({ ...t, open: false }))}>
         <Alert severity={toast.severity} variant="filled" sx={{ width: '100%' }}>{toast.msg}</Alert>

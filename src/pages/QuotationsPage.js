@@ -704,10 +704,13 @@ function QuoteRow({ quote, onSelect, tab, onDelete, onResend, isManager, allProd
               </Typography>
               <Chip label={product?.label || quote.product_key} size="small"
                 sx={{ bgcolor: 'rgba(37,94,171,0.08)', color: '#255EAB', fontWeight: 600, fontSize: 10 }} />
-              {quote.source === 'website' && (
-                <Chip label="🌐 From Website" size="small"
+              {quote.marketer_id ? (
+                <Chip label={`👤 ${quote.marketer_name || quote.marketer_id}${quote.source === 'marketer' ? '' : ' (link)'}`} size="small"
+                  sx={{ bgcolor: 'rgba(139,92,246,0.12)', color: '#7c3aed', fontWeight: 700, fontSize: 10 }} />
+              ) : quote.source === 'website' ? (
+                <Chip label="🌐 Direct Website" size="small"
                   sx={{ bgcolor: 'rgba(37,94,171,0.12)', color: '#1D4E96', fontWeight: 700, fontSize: 10 }} />
-              )}
+              ) : null}
               {hasCustomerSel && (
                 <Chip label={`🏆 ${quote.customer_selection.company_name}`} size="small"
                   sx={{ bgcolor: 'rgba(16,185,129,0.12)', color: '#059669', fontWeight: 700, fontSize: 10 }} />
