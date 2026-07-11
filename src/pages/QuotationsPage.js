@@ -66,6 +66,8 @@ import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 
 const EMAILJS_SERVICE           = process.env.REACT_APP_EMAILJS_SERVICE_ID           || '';
 const EMAILJS_TEMPLATE          = process.env.REACT_APP_EMAILJS_TEMPLATE_ID          || '';
@@ -506,14 +508,150 @@ function ProductForm({ product, values, onChange, errors = {}, allProducts = STA
 }
 
 /* ── quote row ─────────────────────────────────────────────────────────────── */
+/* ── Quote details dialog — every field and every document on one screen ──── */
+function QuoteDetailsDialog({ quote, onClose, allProducts = STATIC_PRODUCTS }) {
+  const product = allProducts[quote.product_key];
+  const fd = quote.form_data || {};
+
+  // Group all filled, non-file fields by their form section (definition order)
+  const sections = [];
+  let current = { name: 'Details', fields: [] };
+  (product?.fields || []).forEach(f => {
+    if (f.section && f.section !== current.name) {
+      if (current.fields.length) sections.push(current);
+      current = { name: f.section, fields: [] };
+    }
+    if (f.type === 'file' || f.type === 'plantable') return;
+    const v = fd[f.name];
+    if (v === undefined || v === null || v === '' || typeof v === 'object') return;
+    if (typeof v === 'string' && v.startsWith('http')) return;
+    current.fields.push({ name: f.name, label: f.label, value: String(v) });
+  });
+  if (current.fields.length) sections.push(current);
+
+  // Documents uploaded with the quote request (file-type fields)
+  const defDocs = (product?.fields || [])
+    .filter(f => f.type === 'file' && typeof fd[f.name] === 'string' && fd[f.name].startsWith('http'))
+    .map(f => ({ label: f.label, url: fd[f.name], filename: fd[f.name + '_filename'] || '' }));
+
+  // Safety net — any other stored URL not covered by the product definition
+  // (e.g. quotes created from the website or older product versions)
+  const knownUrls = new Set(defDocs.map(d => d.url));
+  const extraDocs = Object.entries(fd)
+    .filter(([k, v]) => typeof v === 'string' && v.startsWith('http') && !knownUrls.has(v) && !k.endsWith('_filename'))
+    .map(([k, v]) => ({
+      label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      url: v,
+      filename: fd[k + '_filename'] || '',
+    }));
+
+  const requestDocs = [...defDocs, ...extraDocs];
+
+  // Documents uploaded by insurers with their responses
+  const responseDocs = (quote.responses || [])
+    .filter(r => r.quote_file_url)
+    .map(r => ({ label: r.company_name || 'Insurer', url: r.quote_file_url }));
+
+  const DocRow = ({ label, filename, url }) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.2, borderRadius: '10px',
+                border: '1px solid rgba(99,102,241,0.15)', bgcolor: 'rgba(99,102,241,0.03)' }}>
+      <DescriptionOutlinedIcon sx={{ color: '#6366f1', fontSize: 20, flexShrink: 0 }} />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#374151',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {label}
+        </Typography>
+        {filename && (
+          <Typography sx={{ fontSize: 11, color: '#9CA3AF',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {filename}
+          </Typography>
+        )}
+      </Box>
+      <Button size="small" variant="outlined" onClick={() => openFile(url)}
+        sx={{ fontSize: 11, py: 0.3, flexShrink: 0, borderColor: 'rgba(99,102,241,0.4)', color: '#6366f1' }}>
+        View ↗
+      </Button>
+    </Box>
+  );
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.2, pr: 6 }}>
+        <Box sx={{ fontSize: 20 }}>{product?.icon || '📋'}</Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 800, fontSize: 16 }}>{quote.reference}</Typography>
+          <Typography sx={{ fontSize: 12, color: '#9CA3AF' }}>
+            {product?.label || quote.product_key} · {quote.status || 'draft'}
+            {quote.created_at?.toDate?.() &&
+              ` · ${quote.created_at.toDate().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
+            {quote.created_by_name && ` · By ${quote.created_by_name}`}
+          </Typography>
+        </Box>
+        <IconButton onClick={onClose} sx={{ position: 'absolute', right: 12, top: 12 }}>
+          <CloseIcon sx={{ fontSize: 20 }} />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent dividers sx={{ pt: 2 }}>
+        {/* ── Documents first — the reason this dialog exists ── */}
+        <Typography sx={{ fontSize: 11, fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', letterSpacing: 1, mb: 1 }}>
+          📎 Documents ({requestDocs.length + responseDocs.length})
+        </Typography>
+        {requestDocs.length === 0 && responseDocs.length === 0 ? (
+          <Typography sx={{ fontSize: 12.5, color: '#9CA3AF', mb: 2.5 }}>
+            No documents uploaded for this quotation.
+          </Typography>
+        ) : (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.2, mb: 2.5 }}>
+            {requestDocs.map((d, i) => <DocRow key={`req-${i}`} {...d} />)}
+            {responseDocs.map((d, i) => (
+              <DocRow key={`resp-${i}`} label={`${d.label} — Quotation Document`} url={d.url} />
+            ))}
+          </Box>
+        )}
+
+        {/* ── Every filled field, grouped by form section ── */}
+        {sections.map(sec => (
+          <Box key={sec.name} sx={{ mb: 2.5 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 1, mb: 1 }}>
+              {sec.name}
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 1.5 }}>
+              {sec.fields.map(f => (
+                <Box key={f.name}>
+                  <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {f.label}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12.5, color: '#374151', fontWeight: 500, wordBreak: 'break-word' }}>
+                    {f.value}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        ))}
+        {sections.length === 0 && (
+          <Typography sx={{ fontSize: 12.5, color: '#9CA3AF' }}>No form details recorded.</Typography>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 1.5 }}>
+        <Button onClick={onClose} variant="outlined" sx={{ borderColor: '#e0e0e0', color: '#6B7280' }}>
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 function QuoteRow({ quote, onSelect, tab, onDelete, onResend, isManager, allProducts = STATIC_PRODUCTS }) {
   const [open, setOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const product = allProducts[quote.product_key];
   const sentCount = quote.sent_to?.length || 0;
   const respondedCount = quote.responses?.length || 0;
 
   const created = quote.created_at?.toDate?.()
-    ? quote.created_at.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    ? quote.created_at.toDate().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     : '—';
 
   const hasCustomerSel = !!quote.customer_selection;            // customer picked (green)
@@ -584,6 +722,11 @@ function QuoteRow({ quote, onSelect, tab, onDelete, onResend, isManager, allProd
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} alignItems="center">
+            <Button size="small" variant="outlined" startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 15 }} />}
+              onClick={e => { e.stopPropagation(); setDetailsOpen(true); }}
+              sx={{ fontSize: 11, py: 0.4, borderColor: 'rgba(99,102,241,0.35)', color: '#6366f1', flexShrink: 0 }}>
+              View
+            </Button>
             {(tab === 'received' || tab === 'sent') && sentCount > 0 && (
               <Chip
                 label={`${respondedCount}/${sentCount} received`}
@@ -704,6 +847,9 @@ function QuoteRow({ quote, onSelect, tab, onDelete, onResend, isManager, allProd
           </Box>
         </Collapse>
       </CardContent>
+      {detailsOpen && (
+        <QuoteDetailsDialog quote={quote} onClose={() => setDetailsOpen(false)} allProducts={allProducts} />
+      )}
     </Card>
   );
 }
