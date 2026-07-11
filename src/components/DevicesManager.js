@@ -116,7 +116,7 @@ function DeviceCard({ session, isCurrentDevice, onApprove, onBlock, onRemove, ac
               <Typography sx={{ fontSize: 12, color: '#6B7280' }}>
                 Last seen: {timeAgo(session.last_seen)}
                 {session.first_seen && (
-                  <Box component="span" sx={{ color: '#C4B5B0', ml: 0.8 }}>
+                  <Box component="span" sx={{ color: '#A9B6C8', ml: 0.8 }}>
                     · First login: {timeAgo(session.first_seen)}
                   </Box>
                 )}
@@ -359,7 +359,7 @@ export default function DevicesManager() {
       ) : filtered.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 6 }}>
           <Typography sx={{ color: '#9CA3AF', fontWeight: 600 }}>No devices found.</Typography>
-          <Typography sx={{ fontSize: 12.5, color: '#C4B5B0', mt: 0.5 }}>
+          <Typography sx={{ fontSize: 12.5, color: '#A9B6C8', mt: 0.5 }}>
             Devices appear here when staff log in.
           </Typography>
         </Box>

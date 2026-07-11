@@ -944,7 +944,7 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
       // Selection buttons + PDF download link for email (table-based for Outlook/Gmail compatibility)
       const baseUrl = window.location.origin;
       const selectionSection = `
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;border-top:2px solid #ffe0d4;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;border-top:2px solid #D6E6F5;">
           <tr><td style="padding:20px 0;text-align:center;">
             <p style="margin:0 0 10px;color:#0A1A3E;font-size:15px;font-weight:700;font-family:Arial,sans-serif;">Select Your Preferred Insurer</p>
             <p style="margin:0 0 18px;color:#6B7280;font-size:13px;font-family:Arial,sans-serif;">Click the company you would like to proceed with:</p>
@@ -2517,7 +2517,7 @@ const QuotationsPage = () => {
                 <Typography sx={{ color: '#9CA3AF', fontWeight: 600 }}>
                   {tab === 0 ? 'No sent quote requests yet.' : tab === 1 ? 'No responses received yet.' : 'No quotes with responses to compare yet.'}
                 </Typography>
-                <Typography sx={{ fontSize: 12.5, color: '#C4B5B0', mt: 0.5 }}>
+                <Typography sx={{ fontSize: 12.5, color: '#A9B6C8', mt: 0.5 }}>
                   {tab === 0 ? 'Click "New Quote Request" to get started.' : tab === 1 ? 'Responses appear here once insurers submit their quotes.' : 'Quotes move here once at least one insurer responds.'}
                 </Typography>
               </Box>

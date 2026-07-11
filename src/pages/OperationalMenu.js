@@ -189,7 +189,7 @@ const OperationalMenu = () => {
         borderTop:'1px solid rgba(56,163,224,0.08)',
         display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:1,
       }}>
-        <Typography sx={{ fontSize:12, color:'#C4B5B0' }}>
+        <Typography sx={{ fontSize:12, color:'#A9B6C8' }}>
           Samson Insurance Brokers (Pvt) Ltd — Internal Use Only
         </Typography>
         <Chip label={role} size="small"

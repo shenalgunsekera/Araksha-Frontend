@@ -115,7 +115,7 @@ function DocCard({ label, url, description }) {
           </Link>
         )}
       </Box>
-      <Typography sx={{ fontSize:11, color: url ? '#38A3E0' : '#C4B5B0', fontWeight: url ? 500 : 400 }}>
+      <Typography sx={{ fontSize:11, color: url ? '#38A3E0' : '#A9B6C8', fontWeight: url ? 500 : 400 }}>
         {url ? 'Document uploaded' : 'No document'}
       </Typography>
       {description && (

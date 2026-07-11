@@ -312,7 +312,7 @@ function StepRisk({ confirmedAssets, riskAnswers, onAnswer }) {
   if (relevantRules.length === 0) return (
     <Box sx={{ textAlign:'center', py:6 }}>
       <Typography sx={{ color:'#9CA3AF', fontWeight:600 }}>No risk questions applicable.</Typography>
-      <Typography sx={{ fontSize:12.5, color:'#C4B5B0', mt:0.5 }}>Please confirm assets in the previous step first.</Typography>
+      <Typography sx={{ fontSize:12.5, color:'#A9B6C8', mt:0.5 }}>Please confirm assets in the previous step first.</Typography>
     </Box>
   );
 
@@ -1019,7 +1019,7 @@ function SavedReviews({ onEdit }) {
       ) : filtered.length === 0 ? (
         <Box sx={{ textAlign:'center', py:6 }}>
           <Typography sx={{ color:'#9CA3AF', fontWeight:600 }}>No saved reviews yet.</Typography>
-          <Typography sx={{ fontSize:12.5, color:'#C4B5B0', mt:0.5 }}>Complete an assessment and click "Save Review" to store it here.</Typography>
+          <Typography sx={{ fontSize:12.5, color:'#A9B6C8', mt:0.5 }}>Complete an assessment and click "Save Review" to store it here.</Typography>
         </Box>
       ) : (
         <Stack spacing={1.5}>

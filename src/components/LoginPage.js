@@ -74,7 +74,7 @@ const LoginPage = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(145deg, #1E1E2E 0%, #2D1A10 50%, #3D2210 100%)',
+      background: 'linear-gradient(145deg, #0A1A3E 0%, #0F2A5C 50%, #164B8F 100%)',
       position: 'relative',
       overflow: 'hidden',
       p: 2,

@@ -72,7 +72,7 @@ const theme = createTheme({
             transform: 'translateY(-1px)',
           },
           '&:active': { transform: 'translateY(0)' },
-          '&.Mui-disabled': { background: '#d8c8c4', boxShadow: 'none' },
+          '&.Mui-disabled': { background: '#C9D4E2', boxShadow: 'none' },
         },
         containedSuccess: {
           background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',

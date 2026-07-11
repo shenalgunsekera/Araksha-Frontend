@@ -193,7 +193,7 @@ const PendingApprovals = () => {
     <Box sx={{ textAlign: 'center', py: 6 }}>
       <HourglassEmptyIcon sx={{ fontSize: 42, color: 'rgba(37,94,171,0.15)', mb: 1 }} />
       <Typography sx={{ color: '#9CA3AF', fontWeight: 600 }}>No pending submissions</Typography>
-      <Typography sx={{ fontSize: 12, color: '#C4B5B0' }}>All caught up!</Typography>
+      <Typography sx={{ fontSize: 12, color: '#A9B6C8' }}>All caught up!</Typography>
     </Box>
   );
 
