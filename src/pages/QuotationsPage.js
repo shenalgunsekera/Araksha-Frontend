@@ -872,7 +872,7 @@ function parseDynamicExtras(formData, storeKey) {
 }
 
 /* ── comparison view ──────────────────────────────────────────────────────── */
-function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCTS }) {
+function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCTS, broker = {} }) {
   const product   = allProducts[quote?.product_key];
   // Locally removed responses (deleted by the broker) — filtered out immediately
   // while the Firestore write propagates.
@@ -1138,6 +1138,9 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
           product:       product?.label || quote.product_key,
           table_html:    tableHtml + selectionSection,
           company_count: responses.length,
+          broker_name:   broker.broker_name  || 'Your Broker',
+          broker_email:  broker.broker_email || '',
+          broker_phone:  broker.broker_phone || '',
         },
         { publicKey: EMAILJS_KEY }
       );
@@ -1911,6 +1914,13 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
 const QuotationsPage = () => {
   const { user, userProfile, allProducts: ctxProducts } = useAuth();
   const allP = ctxProducts || STATIC_PRODUCTS;
+  // The staff member sending — shown to insurers & customers so they know who
+  // to reach. Falls back gracefully when a field isn't set on the profile.
+  const brokerInfo = useMemo(() => ({
+    broker_name:  userProfile?.full_name || user?.displayName || user?.email?.split('@')[0] || 'Your Broker',
+    broker_email: userProfile?.email || user?.email || '',
+    broker_phone: userProfile?.phone || '',
+  }), [userProfile, user]);
   const productList = useMemo(
     () => Object.entries(allP).map(([key, val]) => ({ key, ...val })),
     [allP],
@@ -2155,6 +2165,9 @@ const QuotationsPage = () => {
                 product:       productLabel,
                 response_link: responseUrl,
                 details,
+                broker_name:   brokerInfo.broker_name,
+                broker_email:  brokerInfo.broker_email,
+                broker_phone:  brokerInfo.broker_phone,
               }, { publicKey: EMAILJS_KEY });
             } catch (emailErr) {
               const msg = emailErr?.text || emailErr?.message || 'Unknown error';
@@ -2213,6 +2226,9 @@ const QuotationsPage = () => {
           product:       productLabel,
           response_link: responseUrl,
           details:       'This is a resent quote request. Please use the link above to submit your quotation.',
+          broker_name:   brokerInfo.broker_name,
+          broker_email:  brokerInfo.broker_email,
+          broker_phone:  brokerInfo.broker_phone,
         }, { publicKey: EMAILJS_KEY });
         sent++;
       } catch (err) {
@@ -2650,7 +2666,7 @@ const QuotationsPage = () => {
 
         {/* Compare view */}
         {compareQuote ? (
-          <ComparisonView quote={compareQuote} onBack={() => setCompareQuote(null)} onConfirm={handleConfirmQuote} allProducts={allP} />
+          <ComparisonView quote={compareQuote} onBack={() => setCompareQuote(null)} onConfirm={handleConfirmQuote} allProducts={allP} broker={brokerInfo} />
         ) : (
           <>
             <Tabs value={tab} onChange={(_, v) => { setTab(v); setQPage(1); }} sx={{

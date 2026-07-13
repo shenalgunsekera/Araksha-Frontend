@@ -30,7 +30,7 @@ function getSecondaryAuth() {
 }
 
 const CreateAccountModal = ({ open, onClose, onCreated }) => {
-  const [form,    setForm]    = useState({ fullName: '', email: '', password: '', role: 'employee' });
+  const [form,    setForm]    = useState({ fullName: '', email: '', phone: '', password: '', role: 'employee' });
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState('');
   const [created, setCreated] = useState(null);
@@ -52,14 +52,15 @@ const CreateAccountModal = ({ open, onClose, onCreated }) => {
       await setDoc(doc(db, 'users', cred.user.uid), {
         full_name:  form.fullName.trim(),
         email:      form.email.trim(),
+        phone:      form.phone.trim(),
         role:       form.role,
         created_at: serverTimestamp(),
       });
 
       await signOut(secondaryAuth);
 
-      setCreated({ email: form.email.trim(), password: form.password, name: form.fullName.trim(), role: form.role });
-      setForm({ fullName: '', email: '', password: '', role: 'employee' });
+      setCreated({ email: form.email.trim(), password: form.password, name: form.fullName.trim(), phone: form.phone.trim(), role: form.role });
+      setForm({ fullName: '', email: '', phone: '', password: '', role: 'employee' });
       onCreated?.();
     } catch (err) {
       const msg =
@@ -73,7 +74,7 @@ const CreateAccountModal = ({ open, onClose, onCreated }) => {
 
   const copyCredentials = () => {
     if (!created) return;
-    navigator.clipboard.writeText(`Name: ${created.name}\nEmail: ${created.email}\nPassword: ${created.password}\nRole: ${created.role}`);
+    navigator.clipboard.writeText(`Name: ${created.name}\nEmail: ${created.email}${created.phone ? `\nPhone: ${created.phone}` : ''}\nPassword: ${created.password}\nRole: ${created.role}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -101,6 +102,7 @@ const CreateAccountModal = ({ open, onClose, onCreated }) => {
                 {[
                   ['Name',     created.name],
                   ['Email',    created.email],
+                  ...(created.phone ? [['Phone', created.phone]] : []),
                   ['Password', created.password],
                 ].map(([label, val]) => (
                   <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -133,6 +135,9 @@ const CreateAccountModal = ({ open, onClose, onCreated }) => {
               value={form.fullName} onChange={e => set('fullName', e.target.value)} />
             <TextField label="Email Address" type="email" fullWidth size="small"
               value={form.email} onChange={e => set('email', e.target.value)} />
+            <TextField label="Phone Number" fullWidth size="small"
+              value={form.phone} onChange={e => set('phone', e.target.value)}
+              helperText="Shown to insurers & customers on quotes sent by this employee" />
             <TextField label="Password" type="password" fullWidth size="small"
               value={form.password} onChange={e => set('password', e.target.value)}
               helperText="Minimum 6 characters" />

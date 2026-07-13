@@ -1,187 +1,220 @@
 <!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <meta name="x-apple-disable-message-reformatting" />
   <title>Quote Comparison — {{reference}}</title>
-  <!--[if mso]>
-  <noscript><xml><o:OfficeDocumentSettings><o:AllowPNG/><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
-  <![endif]-->
   <style>
-    body, table, td { margin:0; padding:0; }
-    body { background:#F4F4F7; }
-    img  { border:0; display:block; }
-    @media only screen and (max-width:620px) {
-      .wrapper  { width:100% !important; }
-      .body-pad { padding:20px 16px !important; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+      background: #F4F4F7;
+      color: #0A1A3E;
+    }
+    .outer { padding: 32px 16px 48px; }
+    .card {
+      max-width: 680px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.10);
+    }
+
+    /* Header */
+    .header { background: linear-gradient(135deg, #255EAB 0%, #38A3E0 100%); text-align: center; }
+    .header-top { padding: 32px 40px 24px; }
+    .logo-wrap {
+      width: 80px; height: 80px;
+      background: rgba(255,255,255,0.18);
+      border-radius: 20px;
+      border: 2px solid rgba(255,255,255,0.30);
+      display: block; margin: 0 auto 14px auto;
+      text-align: center; line-height: 76px; overflow: hidden;
+    }
+    .logo-wrap img { width: 62px; height: 62px; object-fit: contain; vertical-align: middle; }
+    .header h1 { color: #fff; font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+    .header p  { color: rgba(255,255,255,0.82); font-size: 13px; }
+    .ref-bar { background: #0A1A3E; padding: 12px 40px; text-align: center; }
+    .ref-num {
+      display: block; font-size: 12px; font-weight: 700;
+      letter-spacing: 0.8px; text-transform: uppercase;
+      color: #38A3E0; margin-bottom: 5px;
+    }
+    .product-badge {
+      display: inline-block; background: rgba(56,163,224,0.20); color: #38A3E0;
+      padding: 4px 14px; border-radius: 20px; font-size: 11.5px; font-weight: 700;
+    }
+
+    /* Body */
+    .body { padding: 32px 40px 24px; }
+    .greeting {
+      font-size: 15px; color: #374151; line-height: 1.75;
+      margin-bottom: 22px; border-left: 3px solid #255EAB; padding-left: 14px;
+    }
+    .greeting strong { color: #0A1A3E; }
+    .intro-box {
+      background: rgba(37,94,171,0.06); border: 1px solid rgba(37,94,171,0.15);
+      border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;
+    }
+    .intro-box p { font-size: 13.5px; color: #4B5563; line-height: 1.7; }
+    .intro-box strong { color: #255EAB; }
+    .table-label {
+      font-size: 10.5px; font-weight: 800; color: #9CA3AF;
+      text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 12px;
+    }
+    .comparison-wrap {
+      overflow-x: auto; border-radius: 12px; border: 1px solid #E5E7EB; margin-bottom: 28px;
+    }
+    .steps { margin-bottom: 28px; }
+    .steps-title {
+      font-size: 10.5px; font-weight: 800; color: #9CA3AF;
+      text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 14px;
+    }
+    .step { overflow: hidden; margin-bottom: 12px; }
+    .step-dot {
+      float: left; width: 26px; height: 26px; border-radius: 50%;
+      background: linear-gradient(135deg, #255EAB, #38A3E0);
+      color: #fff; font-size: 12px; font-weight: 800;
+      text-align: center; line-height: 26px; margin-right: 11px; margin-top: 1px;
+    }
+    .step-text { overflow: hidden; font-size: 13.5px; color: #4B5563; line-height: 1.6; padding-top: 4px; }
+    .step-clear { clear: both; }
+    .cta-box {
+      background: linear-gradient(135deg, #0A1A3E 0%, #163C77 100%);
+      border-radius: 14px; padding: 24px 32px; text-align: center; margin-bottom: 24px;
+    }
+    .cta-box h3 { color: #fff; font-size: 16px; font-weight: 800; margin-bottom: 8px; }
+    .cta-box p  { color: rgba(255,255,255,0.55); font-size: 13px; margin-bottom: 0; }
+    .notice {
+      background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.22);
+      border-left: 4px solid #F59E0B; border-radius: 0 10px 10px 0;
+      padding: 12px 16px; font-size: 13px; color: #92400E; line-height: 1.6; margin-bottom: 22px;
+    }
+
+    /* Sender / underwriter contact card */
+    .sender {
+      background: #eef5fc; border: 1px solid #cfe2f5; border-radius: 12px;
+      padding: 18px 20px; margin-bottom: 24px;
+    }
+    .sender .lbl {
+      margin: 0 0 10px; color: #9CA3AF; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.6px; text-transform: uppercase;
+    }
+    .sender .name { margin: 0; color: #0A1A3E; font-size: 16px; font-weight: 700; }
+    .sender .row  { padding: 2px 0; color: #4B5563; font-size: 13.5px; }
+    .sender a     { color: #255EAB; text-decoration: none; font-weight: 600; }
+
+    /* Footer */
+    .footer { background: #F9F9FB; border-top: 1px solid #E5E7EB; padding: 22px 40px 26px; text-align: center; }
+    .footer p { font-size: 12px; color: #9CA3AF; line-height: 1.8; }
+    .footer strong { color: #6B7280; }
+    .confidential {
+      margin-top: 12px; background: #EAECEF; border-radius: 6px; padding: 7px 14px;
+      display: inline-block; font-size: 10.5px; color: #9CA3AF; letter-spacing: 0.3px;
+    }
+
+    @media (max-width: 480px) {
+      .body, .footer { padding: 24px 20px; }
+      .ref-bar { padding: 12px 20px; }
     }
   </style>
 </head>
-<body style="margin:0;padding:0;background:#F4F4F7;">
+<body>
+<div class="outer">
+  <div class="card">
 
-<!-- Outer wrapper -->
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#F4F4F7;">
-<tr><td align="center" style="padding:32px 16px 48px;">
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header-top">
+        <div class="logo-wrap">
+          <img src="https://araksha.lk/wp-content/uploads/2025/08/SIB-logo-200-x-200.webp" alt="Araksha" />
+        </div>
+        <h1>Araksha &mdash; Samson Insurance Brokers</h1>
+        <p>Insurance Quote Comparison Report</p>
+      </div>
+      <div class="ref-bar">
+        <span class="ref-num">REF: {{reference}}</span>
+        <span class="product-badge">{{product}}</span>
+      </div>
+    </div>
 
-  <!-- Card -->
-  <table class="wrapper" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:20px;">
+    <!-- BODY -->
+    <div class="body">
 
-    <!-- ── HEADER (gradient — Outlook falls back to #255EAB) ── -->
-    <tr>
-      <td align="center" bgcolor="#255EAB" style="background:linear-gradient(135deg,#255EAB 0%,#38A3E0 100%);border-radius:20px 20px 0 0;padding:32px 40px 24px;">
-        <!-- Logo -->
-        <table cellpadding="0" cellspacing="0" style="margin:0 auto 14px;">
-          <tr>
-            <td align="center" bgcolor="#FFFFFF" style="background:rgba(255,255,255,0.20);border-radius:16px;padding:9px;">
-              <!-- TODO(Araksha): upload the logo to a public host (e.g. Cloudinary or araksha.lk) and update this URL --><img src="https://araksha.lk/araksha-logo.png"
-                   alt="Samson Insurance Brokers" width="62" height="62"
-                   style="display:block;width:62px;height:62px;object-fit:contain;" />
-            </td>
-          </tr>
-        </table>
-        <h1 style="margin:0 0 4px;color:#ffffff;font-size:24px;font-weight:800;font-family:'Segoe UI',Arial,sans-serif;">Samson Insurance Brokers</h1>
-        <p  style="margin:0;color:rgba(255,255,255,0.85);font-size:13px;font-family:'Segoe UI',Arial,sans-serif;">Insurance Quote Comparison Report</p>
-      </td>
-    </tr>
+      <p class="greeting">
+        Dear <strong>{{to_name}}</strong>,<br /><br />
+        Please find below a <strong>side-by-side comparison</strong> of the quotations
+        received from <strong>{{company_count}} insurance companies</strong> for your
+        reference number <strong>{{reference}}</strong>.
+        Review the premiums and coverage terms and let us know your preferred insurer.
+      </p>
 
-    <!-- Reference bar -->
-    <tr>
-      <td align="center" bgcolor="#0A1A3E" style="background:#0A1A3E;padding:12px 40px;">
-        <span style="display:block;font-size:12px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:#38A3E0;margin-bottom:5px;font-family:'Segoe UI',Arial,sans-serif;">REF: {{reference}}</span>
-        <span style="display:inline-block;background:rgba(56,163,224,0.22);color:#38A3E0;padding:4px 16px;border-radius:20px;font-size:11.5px;font-weight:700;font-family:'Segoe UI',Arial,sans-serif;">{{product}}</span>
-      </td>
-    </tr>
-
-    <!-- ── BODY ── -->
-    <tr>
-      <td class="body-pad" style="padding:32px 40px 28px;">
-
-        <!-- Greeting -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:22px;">
-          <tr>
-            <td width="3" bgcolor="#255EAB" style="background:#255EAB;border-radius:2px;">&nbsp;</td>
-            <td style="padding:2px 0 2px 14px;font-size:15px;color:#374151;line-height:1.75;font-family:'Segoe UI',Arial,sans-serif;">
-              Dear <strong style="color:#0A1A3E;">{{to_name}}</strong>,<br /><br />
-              Please find below a <strong style="color:#0A1A3E;">side-by-side comparison</strong> of the quotations
-              received from <strong style="color:#0A1A3E;">{{company_count}} insurance companies</strong>
-              for your reference number <strong style="color:#0A1A3E;">{{reference}}</strong>.
-              Review the premiums and coverage terms and let us know your preferred insurer.
-            </td>
-          </tr>
-        </table>
-
-        <!-- Intro box -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-          <tr>
-            <td style="background:#f0f0ff;border:1px solid #c7c9f7;border-radius:10px;padding:16px 20px;font-size:13.5px;color:#4B5563;line-height:1.7;font-family:'Segoe UI',Arial,sans-serif;">
-              This comparison has been prepared by <strong style="color:#6366f1;">Samson Insurance Brokers</strong>
-              on your behalf. All figures are as quoted by the respective insurance companies
-              and are subject to their standard terms and conditions.
-            </td>
-          </tr>
-        </table>
-
-        <!-- Table label -->
-        <p style="margin:0 0 12px;font-size:10.5px;font-weight:800;color:#9CA3AF;text-transform:uppercase;letter-spacing:1.2px;font-family:'Segoe UI',Arial,sans-serif;">Quote Comparison</p>
-
-        <!-- Injected comparison table -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;border:1px solid #E5E7EB;border-radius:10px;">
-          <tr><td style="padding:0;overflow:auto;">
-            {{{table_html}}}
-          </td></tr>
-        </table>
-
-        <!-- Next steps heading -->
-        <p style="margin:0 0 14px;font-size:10.5px;font-weight:800;color:#9CA3AF;text-transform:uppercase;letter-spacing:1.2px;font-family:'Segoe UI',Arial,sans-serif;">What Happens Next</p>
-
-        <!-- Step 1 -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
-          <tr>
-            <td width="26" valign="top" style="padding-right:12px;">
-              <table cellpadding="0" cellspacing="0"><tr>
-                <td align="center" bgcolor="#6366f1" style="width:26px;height:26px;border-radius:13px;color:#fff;font-size:12px;font-weight:800;font-family:'Segoe UI',Arial,sans-serif;line-height:26px;">1</td>
-              </tr></table>
-            </td>
-            <td style="font-size:13.5px;color:#4B5563;line-height:1.6;padding-top:4px;font-family:'Segoe UI',Arial,sans-serif;">
-              Review the comparison above and identify your preferred insurer based on premium and coverage.
-            </td>
-          </tr>
-        </table>
-
-        <!-- Step 2 -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
-          <tr>
-            <td width="26" valign="top" style="padding-right:12px;">
-              <table cellpadding="0" cellspacing="0"><tr>
-                <td align="center" bgcolor="#6366f1" style="width:26px;height:26px;border-radius:13px;color:#fff;font-size:12px;font-weight:800;font-family:'Segoe UI',Arial,sans-serif;line-height:26px;">2</td>
-              </tr></table>
-            </td>
-            <td style="font-size:13.5px;color:#4B5563;line-height:1.6;padding-top:4px;font-family:'Segoe UI',Arial,sans-serif;">
-              Contact <strong>Samson Insurance Brokers</strong> with your selection or any questions.
-            </td>
-          </tr>
-        </table>
-
-        <!-- Step 3 -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-          <tr>
-            <td width="26" valign="top" style="padding-right:12px;">
-              <table cellpadding="0" cellspacing="0"><tr>
-                <td align="center" bgcolor="#6366f1" style="width:26px;height:26px;border-radius:13px;color:#fff;font-size:12px;font-weight:800;font-family:'Segoe UI',Arial,sans-serif;line-height:26px;">3</td>
-              </tr></table>
-            </td>
-            <td style="font-size:13.5px;color:#4B5563;line-height:1.6;padding-top:4px;font-family:'Segoe UI',Arial,sans-serif;">
-              We will proceed with policy issuance with your chosen insurer and send you the documents.
-            </td>
-          </tr>
-        </table>
-
-        <!-- CTA box -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-          <tr>
-            <td align="center" bgcolor="#0A1A3E" style="background:#0A1A3E;border-radius:14px;padding:24px 32px;">
-              <h3 style="margin:0 0 8px;color:#ffffff;font-size:16px;font-weight:800;font-family:'Segoe UI',Arial,sans-serif;">Need Help Deciding?</h3>
-              <p style="margin:0;color:#9CA3AF;font-size:13px;font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;">Our team is happy to walk you through the comparison and recommend the best option for your needs. Simply reply to this email or call us.</p>
-            </td>
-          </tr>
-        </table>
-
-        <!-- Notice -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:22px;">
-          <tr>
-            <td width="4" bgcolor="#F59E0B" style="background:#F59E0B;border-radius:2px;">&nbsp;</td>
-            <td style="background:#fffbeb;padding:12px 16px;border:1px solid #fde68a;border-left:none;border-radius:0 10px 10px 0;font-size:13px;color:#92400E;line-height:1.6;font-family:'Segoe UI',Arial,sans-serif;">
-              <strong>Important:</strong> Quotations are subject to the insurer's terms and may have a validity period.
-              Please confirm your selection promptly to avoid delays in policy issuance.
-            </td>
-          </tr>
-        </table>
-
-        <p style="margin:0;font-size:12px;color:#9CA3AF;line-height:1.7;text-align:center;font-family:'Segoe UI',Arial,sans-serif;">
-          This comparison was prepared exclusively for you. Please do not forward without consent from Samson Insurance Brokers.
+      <div class="intro-box">
+        <p>
+          This comparison has been prepared by <strong>Araksha &mdash; Samson Insurance Brokers</strong>
+          on your behalf. All figures are as quoted by the respective insurance companies
+          and are subject to their standard terms and conditions.
         </p>
+      </div>
 
-      </td>
-    </tr>
+      <!-- Comparison table injected here — triple braces disable HTML escaping -->
+      <div class="table-label">Quote Comparison</div>
+      <div class="comparison-wrap">
+        {{{table_html}}}
+      </div>
 
-    <!-- ── FOOTER ── -->
-    <tr>
-      <td align="center" bgcolor="#F9F9FB" style="background:#F9F9FB;border-top:1px solid #E5E7EB;border-radius:0 0 20px 20px;padding:22px 40px 26px;">
-        <p style="margin:0 0 4px;font-size:13px;color:#6B7280;line-height:1.8;font-family:'Segoe UI',Arial,sans-serif;">
-          <strong style="color:#374151;">Samson Insurance Brokers (Pvt) Ltd</strong><br />
-          Insurance Broking &amp; Risk Management &middot; Sri Lanka
-        </p>
-        <span style="display:inline-block;margin-top:10px;background:#EAECEF;border-radius:6px;padding:6px 14px;font-size:10.5px;color:#9CA3AF;letter-spacing:0.3px;font-family:'Segoe UI',Arial,sans-serif;">
-          CONFIDENTIAL &mdash; Prepared for {{to_name}}
-        </span>
-      </td>
-    </tr>
+      <!-- Next steps -->
+      <div class="steps">
+        <div class="steps-title">What Happens Next</div>
+        <div class="step">
+          <div class="step-dot">1</div>
+          <div class="step-text">Review the comparison above and identify your preferred insurer based on premium and coverage.</div>
+          <div class="step-clear"></div>
+        </div>
+        <div class="step">
+          <div class="step-dot">2</div>
+          <div class="step-text">Contact your Araksha representative below with your selection or any questions.</div>
+          <div class="step-clear"></div>
+        </div>
+        <div class="step">
+          <div class="step-dot">3</div>
+          <div class="step-text">We will proceed with policy issuance with your chosen insurer and send you the documents.</div>
+          <div class="step-clear"></div>
+        </div>
+      </div>
 
-  </table><!-- /card -->
+      <!-- Sender / underwriter contact -->
+      <div class="sender">
+        <p class="lbl">Prepared &amp; sent by</p>
+        <p class="name">{{broker_name}}</p>
+        <div class="row">&#128222;&nbsp; <a href="tel:{{broker_phone}}">{{broker_phone}}</a></div>
+        <div class="row">&#9993;&nbsp; <a href="mailto:{{broker_email}}">{{broker_email}}</a></div>
+      </div>
 
-</td></tr>
-</table><!-- /outer -->
+      <div class="notice">
+        &#9888;&#65039; <strong>Important:</strong> Quotations are subject to the insurer's terms and may have a validity period.
+        Please confirm your selection promptly to avoid delays in policy issuance.
+      </div>
+
+      <p style="font-size:12.5px;color:#9CA3AF;line-height:1.7;text-align:center;">
+        This comparison was prepared exclusively for you. Please do not forward without consent from Samson Insurance Brokers.
+      </p>
+
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <p>
+        <strong>Samson Insurance Brokers (Pvt) Ltd</strong><br />
+        Insurance Broking &amp; Risk Management · Sri Lanka
+      </p>
+      <div class="confidential">
+        CONFIDENTIAL — Prepared for {{to_name}}
+      </div>
+    </div>
+
+  </div>
+</div>
 </body>
 </html>

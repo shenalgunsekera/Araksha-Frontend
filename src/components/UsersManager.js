@@ -27,6 +27,8 @@ import Pagination from '@mui/material/Pagination';
 
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import SupervisorAccountOutlinedIcon from '@mui/icons-material/SupervisorAccountOutlined';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
@@ -48,6 +50,7 @@ const UsersManager = ({ currentUserId, isAdmin }) => {
 
   const [confirmDlg, setConfirmDlg] = useState({ open: false, userId: null, userName: '', newRole: '' });
   const [deleteDlg,  setDeleteDlg]  = useState({ open: false, userId: null, userName: '' });
+  const [editDlg,    setEditDlg]    = useState({ open: false, userId: null, fullName: '', phone: '', email: '' });
   const [saving,     setSaving]     = useState(false);
 
   useEffect(() => {
@@ -78,6 +81,29 @@ const UsersManager = ({ currentUserId, isAdmin }) => {
 
   const handleRoleChange = (userId, userName, newRole) => {
     setConfirmDlg({ open: true, userId, userName, newRole });
+  };
+
+  const openEdit = (u) => {
+    setEditDlg({ open: true, userId: u.id, fullName: u.full_name || '', phone: u.phone || '', email: u.email || '' });
+  };
+
+  const saveEdit = async () => {
+    if (!editDlg.fullName.trim()) { setToast({ open: true, msg: 'Name cannot be empty.', severity: 'error' }); return; }
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'users', editDlg.userId), {
+        full_name: editDlg.fullName.trim(),
+        phone:     editDlg.phone.trim(),
+      });
+      setUsers(prev => prev.map(u => u.id === editDlg.userId
+        ? { ...u, full_name: editDlg.fullName.trim(), phone: editDlg.phone.trim() }
+        : u));
+      setToast({ open: true, msg: 'Profile updated.', severity: 'success' });
+    } catch (err) {
+      setToast({ open: true, msg: err.message, severity: 'error' });
+    }
+    setSaving(false);
+    setEditDlg({ open: false, userId: null, fullName: '', phone: '', email: '' });
   };
 
   const confirmRoleChange = async () => {
@@ -161,6 +187,10 @@ const UsersManager = ({ currentUserId, isAdmin }) => {
                           )}
                         </Stack>
                         <Typography sx={{ fontSize: 12, color: '#9CA3AF' }}>{u.email}</Typography>
+                        <Typography sx={{ fontSize: 12, color: u.phone ? '#6B7280' : '#C9CDD4', display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2 }}>
+                          <PhoneOutlinedIcon sx={{ fontSize: 12 }} />
+                          {u.phone || 'No phone — add one'}
+                        </Typography>
                       </Box>
 
                       {/* Role selector — admins can change any role except their own */}
@@ -189,6 +219,15 @@ const UsersManager = ({ currentUserId, isAdmin }) => {
                                 border: `1px solid ${rc.border}` }} />
                       )}
 
+                      {(isAdmin || isSelf) && (
+                        <Tooltip title="Edit name & phone">
+                          <IconButton size="small" onClick={() => openEdit(u)}
+                            sx={{ color: '#9CA3AF', '&:hover': { color: '#255EAB' } }}>
+                            <EditOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+
                       {isAdmin && !isSelf && (
                         <Tooltip title="Remove user">
                           <IconButton size="small"
@@ -214,6 +253,28 @@ const UsersManager = ({ currentUserId, isAdmin }) => {
           )}
         </>
       )}
+
+      {/* Edit name & phone dialog */}
+      <Dialog open={editDlg.open} onClose={() => setEditDlg(d => ({ ...d, open: false }))} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: 16 }}>Edit Profile</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: 12, color: '#9CA3AF', mb: 2 }}>{editDlg.email}</Typography>
+          <Stack spacing={2}>
+            <TextField label="Full Name" size="small" fullWidth value={editDlg.fullName}
+              onChange={e => setEditDlg(d => ({ ...d, fullName: e.target.value }))} />
+            <TextField label="Phone Number" size="small" fullWidth value={editDlg.phone}
+              onChange={e => setEditDlg(d => ({ ...d, phone: e.target.value }))}
+              helperText="Shown to insurers & customers on quotes this person sends" />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setEditDlg(d => ({ ...d, open: false }))} variant="outlined"
+            sx={{ borderColor: '#e0e0e0', color: '#6B7280' }}>Cancel</Button>
+          <Button variant="contained" onClick={saveEdit} disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Role change confirm dialog */}
       <Dialog open={confirmDlg.open} onClose={() => setConfirmDlg(d => ({ ...d, open: false }))} maxWidth="xs" fullWidth>
