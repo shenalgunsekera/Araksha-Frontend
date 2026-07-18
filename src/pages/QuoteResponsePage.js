@@ -948,7 +948,7 @@ const QuoteResponsePage = () => {
                                     {Number(p[row.key] || 0).toLocaleString()}
                                   </Typography>
                                 ) : (
-                                  <TextField size="small" type="number" fullWidth placeholder="0"
+                                  <TextField size="small" type="number" fullWidth placeholder="0" inputProps={{ step: 'any', inputMode: 'decimal' }}
                                     value={p[row.key] || ''}
                                     onChange={e => updatePlanPremium(pi, row.key, e.target.value)}
                                     sx={{ '& .MuiInputBase-root': { fontSize: 13 } }} />
@@ -978,34 +978,34 @@ const QuoteResponsePage = () => {
                     Premium Breakdown
                   </Typography>
                   <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                    <TextField label="Basic Premium (LKR) *" type="number" size="small" fullWidth
+                    <TextField label="Basic Premium (LKR) *" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       error={!!fieldErrors.basic_premium} helperText={fieldErrors.basic_premium}
                       value={form.basic_premium} onChange={e => setFE('basic_premium', e.target.value)} />
-                    <TextField label="Strike Riot Civil Commotion — SRCC (LKR)" type="number" size="small" fullWidth
+                    <TextField label="Strike Riot Civil Commotion — SRCC (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       error={!!fieldErrors.srcc_premium} helperText={fieldErrors.srcc_premium}
                       value={form.srcc_premium} onChange={e => setFE('srcc_premium', e.target.value)} />
-                    <TextField label="Terrorism Cover — TC (LKR)" type="number" size="small" fullWidth
+                    <TextField label="Terrorism Cover — TC (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       error={!!fieldErrors.tc_premium} helperText={fieldErrors.tc_premium}
                       value={form.tc_premium} onChange={e => setFE('tc_premium', e.target.value)} />
-                    <TextField label="Policy Fees (LKR)" type="number" size="small" fullWidth
+                    <TextField label="Policy Fees (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       value={form.policy_fees} onChange={e => setFE('policy_fees', e.target.value)} />
-                    <TextField label="Cess (LKR)" type="number" size="small" fullWidth
+                    <TextField label="Cess (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       value={form.cess} onChange={e => setFE('cess', e.target.value)} />
-                    <TextField label="Road Safety Tax (LKR)" type="number" size="small" fullWidth
+                    <TextField label="Road Safety Tax (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       value={form.road_safety_tax} onChange={e => setFE('road_safety_tax', e.target.value)} />
-                    <TextField label="Stamp Fee (LKR)" type="number" size="small" fullWidth
+                    <TextField label="Stamp Fee (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       value={form.stamp_fee} onChange={e => setFE('stamp_fee', e.target.value)} />
-                    <TextField label="NBL (LKR)" type="number" size="small" fullWidth
+                    <TextField label="NBL (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       value={form.nbl} onChange={e => setFE('nbl', e.target.value)} />
-                    <TextField label="SSC Levy (LKR)" type="number" size="small" fullWidth
+                    <TextField label="SSC Levy (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       value={form.ssc_levy} onChange={e => setFE('ssc_levy', e.target.value)} />
-                    <TextField label="Admin Fee (LKR)" type="number" size="small" fullWidth
+                    <TextField label="Admin Fee (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       error={!!fieldErrors.admin_fee} helperText={fieldErrors.admin_fee}
                       value={form.admin_fee} onChange={e => setFE('admin_fee', e.target.value)} />
-                    <TextField label="VAT (LKR)" type="number" size="small" fullWidth
+                    <TextField label="VAT (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       error={!!fieldErrors.vat_amount} helperText={fieldErrors.vat_amount}
                       value={form.vat_amount} onChange={e => setFE('vat_amount', e.target.value)} />
-                    <TextField label="Other (LKR)" type="number" size="small" fullWidth
+                    <TextField label="Other (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       value={form.other_premium} onChange={e => setFE('other_premium', e.target.value)} />
                   </Box>
                   <Box sx={{ mt: 1.5, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(37,94,171,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

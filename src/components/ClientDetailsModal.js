@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { viewUrl } from '../storage';
+import { viewUrl, openFile } from '../storage';
 import { PRODUCTS } from '../config/products';
 import { db } from '../firebase';
 import { doc, updateDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
@@ -108,9 +108,9 @@ function DocCard({ label, url, description }) {
       <Box sx={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', mb:0.5 }}>
         <Typography sx={{ fontSize:12, fontWeight:700, color:'#374151' }}>{label}</Typography>
         {url && (
-          <Link href={viewUrl(url)} target="_blank" rel="noopener noreferrer"
+          <Link component="button" type="button" onClick={() => openFile(url)}
             sx={{ display:'flex', alignItems:'center', gap:0.3, fontSize:11, fontWeight:700, color:'#255EAB', textDecoration:'none',
-                  '&:hover':{ textDecoration:'underline' } }}>
+                  background:'none', border:'none', cursor:'pointer', '&:hover':{ textDecoration:'underline' } }}>
             View <OpenInNewIcon sx={{ fontSize:11 }} />
           </Link>
         )}

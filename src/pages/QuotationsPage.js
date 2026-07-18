@@ -80,6 +80,17 @@ if (EMAILJS_KEY) emailjs.init({ publicKey: EMAILJS_KEY });
 
 const DRAFT_KEY = 'araksha_draft_quote';
 
+// The "Inhouse" customer types behave exactly like their base type for the
+// purpose of showIf visibility (Individual Inhouse → Individual shows NIC etc.;
+// Corporate Inhouse → Corporate shows VAT/BR). Normalise before comparing.
+function showIfValue(field, value) {
+  if (field === 'customer_type') {
+    if (value === 'Individual Inhouse') return 'Individual';
+    if (value === 'Corporate Inhouse') return 'Corporate';
+  }
+  return value;
+}
+
 /* ── form validation ─────────────────────────────────────────────────────── */
 function validateForm(product, values, allProducts = STATIC_PRODUCTS) {
   const def = allProducts[product];
@@ -94,7 +105,7 @@ function validateForm(product, values, allProducts = STATIC_PRODUCTS) {
     if (f.type === 'file') return;
     if (f.type === 'plantable') return;
     // skip fields hidden by showIf
-    if (f.showIf && values[f.showIf.field] !== f.showIf.value) return;
+    if (f.showIf && showIfValue(f.showIf.field, values[f.showIf.field]) !== f.showIf.value) return;
 
     const raw = values[f.name];
     const val = raw?.toString().trim() ?? '';
@@ -157,7 +168,7 @@ function ProductForm({ product, values, onChange, errors = {}, allProducts = STA
       const v = values[f.showIf.field];
       return !!v && v !== '0' && Number(v) > 0;
     }
-    return values[f.showIf.field] === f.showIf.value;
+    return showIfValue(f.showIf.field, values[f.showIf.field]) === f.showIf.value;
   };
 
   const renderField = (f) => {
@@ -358,8 +369,8 @@ function ProductForm({ product, values, onChange, errors = {}, allProducts = STA
             {url ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.3 }}>
                 <CheckCircleIcon sx={{ color: '#22c55e', fontSize: 14 }} />
-                <Typography component="a" href={url} target="_blank" rel="noopener noreferrer"
-                  sx={{ fontSize: 11, color: '#22c55e', textDecoration: 'none', '&:hover': { textDecoration: 'underline' }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>
+                <Typography component="a" href={url} onClick={e => { e.preventDefault(); openFile(url); }} rel="noopener noreferrer"
+                  sx={{ fontSize: 11, color: '#22c55e', textDecoration: 'none', cursor: 'pointer', '&:hover': { textDecoration: 'underline' }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>
                   {fname || 'View document'}
                 </Typography>
               </Box>
