@@ -56,6 +56,29 @@ const ENDORSEMENT_TYPES = [
 const endoNum = (v) => parseFloat(String(v ?? '').replace(/,/g, '')) || 0;
 const fmtSigned = (n) => `${n < 0 ? '-' : '+'}LKR ${Math.abs(n).toLocaleString()}`;
 
+// Robustly read a stored money value: a number, a comma-separated string
+// ("32,017.27"), currency text, or Excel scientific notation all parse cleanly
+// so premiums never render as "LKR NaN".
+const parseMoney = (v) => {
+  if (typeof v === 'number') return v;
+  if (v === null || v === undefined || v === '') return NaN;
+  return Number(String(v).replace(/,/g, '').replace(/[^0-9.eE+-]/g, ''));
+};
+const fmtLKRv = (v) => {
+  const n = parseMoney(v);
+  return Number.isFinite(n) ? `LKR ${n.toLocaleString()}` : '—';
+};
+// Expand Excel scientific notation ("2.00E+11") in ID-type fields (NIC, BR, VAT)
+// back to a plain digit string so long numbers read correctly instead of "2.00E+11".
+const plainId = (v) => {
+  const s = String(v ?? '').trim();
+  if (/^[+-]?\d+(\.\d+)?[eE][+-]?\d+$/.test(s)) {
+    const n = Number(s);
+    if (Number.isFinite(n)) return n.toLocaleString('fullwide', { useGrouping: false });
+  }
+  return v;
+};
+
 function Field({ label, value }) {
   const empty = value === null || value === undefined || value === '';
   return (
@@ -88,7 +111,7 @@ function SubHeader({ title }) {
 }
 
 function FinancialRow({ label, value }) {
-  const fmt = v => v ? `LKR ${Number(v).toLocaleString()}` : '—';
+  const fmt = v => fmtLKRv(v);
   return (
     <Box sx={{ display:'flex', justifyContent:'space-between', alignItems:'center', py:1, borderBottom:'1px solid rgba(56,163,224,0.08)' }}>
       <Typography sx={{ fontSize:13, color:'#6B7280' }}>{label}</Typography>
@@ -176,7 +199,7 @@ const ClientDetailsModal = ({ client, onClose }) => {
 
   // Sum-insured currency (per policy) — format SI values with it.
   const siCur = client.sum_insured_currency || 'LKR';
-  const fmtSI = v => (v || v === 0) && v !== '' ? `${siCur} ${Number(v).toLocaleString()}` : '—';
+  const fmtSI = v => { const n = parseMoney(v); return Number.isFinite(n) ? `${siCur} ${n.toLocaleString()}` : '—'; };
 
   // Revised totals = original policy value + cumulative endorsement deltas
   const sumDelta  = endorsements.reduce((a, e) => a + endoNum(e.sum_insured_change), 0);
@@ -270,7 +293,7 @@ const ClientDetailsModal = ({ client, onClose }) => {
       const pw    = pdf.internal.pageSize.getWidth();
       const ph    = pdf.internal.pageSize.getHeight();
       const today = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
-      const fmtLKR = v => v ? `LKR ${Number(v).toLocaleString()}` : '—';
+      const fmtLKR = v => fmtLKRv(v);
 
       const PDF_TABS = [
         { key:'overview',   label:'Overview'   },
@@ -770,7 +793,7 @@ const ClientDetailsModal = ({ client, onClose }) => {
     setExportingXlsx(false);
   };
 
-  const fmtLKR = v => v ? `LKR ${Number(v).toLocaleString()}` : null;
+  const fmtLKR = v => { const n = parseMoney(v); return Number.isFinite(n) ? `LKR ${n.toLocaleString()}` : null; };
 
   const renderSection = (sec) => {
     switch (sec) {
@@ -797,9 +820,9 @@ const ClientDetailsModal = ({ client, onClose }) => {
           <Grid container spacing={2.5}>
             <Grid item xs={12} sm={6} md={4}><Field label="Customer Type"         value={client.customer_type} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Client Name"           value={client.client_name} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="NIC / Passport No."    value={client.nic_proof} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="Business Registration" value={client.business_registration} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="SVAT / VAT No."        value={client.svat_proof} /></Grid>
+            <Grid item xs={12} sm={6} md={4}><Field label="NIC / Passport No."    value={plainId(client.nic_proof)} /></Grid>
+            <Grid item xs={12} sm={6} md={4}><Field label="Business Registration" value={plainId(client.business_registration)} /></Grid>
+            <Grid item xs={12} sm={6} md={4}><Field label="SVAT / VAT No."        value={plainId(client.svat_proof)} /></Grid>
             <Grid item xs={12} sm={6}       ><Field label="Street 1"              value={client.street1} /></Grid>
             <Grid item xs={12} sm={6}       ><Field label="Street 2"              value={client.street2} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="City"                  value={client.city} /></Grid>

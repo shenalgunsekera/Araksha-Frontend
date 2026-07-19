@@ -24,6 +24,7 @@ import Chip from '@mui/material/Chip';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import TextField from '@mui/material/TextField';
+import Autocomplete from '@mui/material/Autocomplete';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormControl from '@mui/material/FormControl';
@@ -949,6 +950,22 @@ const ReportsPage = () => {
   const fieldsFor = (src) => src === 'clients' ? clientFields : src === 'claims' ? CLAIM_FIELDS : QUOTE_FIELDS;
   const sourceFields = fieldsFor(source);
 
+  // Distinct values actually present in the data for a field, so filter values
+  // can be picked from a dropdown instead of typed blind.
+  const distinctValues = useCallback((fieldKey) => {
+    const base = source === 'clients' ? clients : source === 'claims' ? claims : quotes;
+    const set = new Set();
+    for (const row of base) {
+      let v = row?.[fieldKey];
+      if (v === null || v === undefined || v === '') continue;
+      if (typeof v === 'object') { v = v.toDate ? v.toDate().toISOString().slice(0, 10) : null; }
+      if (v === null) continue;
+      set.add(String(v));
+      if (set.size > 300) break;
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [source, clients, claims, quotes]);
+
   // Compute report results from an explicit config + the current datasets/period.
   // Used by both the Run button and by running a template directly, so a template
   // run never depends on React state that hasn't updated yet.
@@ -1399,7 +1416,11 @@ const ReportsPage = () => {
                                 slotProps={{textField:{size:'small',sx:{flex:1,'& input':{fontSize:12}}}}}/>
                             )
                           ) : (
-                            <TextField size="small" value={f.value} onChange={e=>setFilters(p=>p.map((ff,idx)=>idx===i?{...ff,value:e.target.value}:ff))} placeholder="Value" sx={{flex:1,'& input':{fontSize:12}}}/>
+                            <Autocomplete freeSolo size="small" options={distinctValues(f.field)}
+                              inputValue={f.value||''}
+                              onInputChange={(_,val)=>setFilters(p=>p.map((ff,idx)=>idx===i?{...ff,value:val}:ff))}
+                              sx={{flex:1}}
+                              renderInput={(params)=><TextField {...params} placeholder="Value — pick or type" sx={{'& input':{fontSize:12}}}/>}/>
                           )}
                         </Stack>
                       </Box>

@@ -153,6 +153,17 @@ function ProductForm({ product, values, onChange, errors = {}, allProducts = STA
 
   const nameField = def.customerNameField || 'proposer_name';
 
+  // Expand Excel scientific notation ("2.00E+11") back to a plain digit string so
+  // NIC / BR / VAT / phone numbers copy across correctly instead of "2.00E+11".
+  const plainId = (v) => {
+    const s = String(v ?? '').trim();
+    if (/^[+-]?\d+(\.\d+)?[eE][+-]?\d+$/.test(s)) {
+      const n = Number(s);
+      if (Number.isFinite(n)) return n.toLocaleString('fullwide', { useGrouping: false });
+    }
+    return v ?? '';
+  };
+
   // Fill the proposer details from a matched existing client (from the
   // `clients` collection). Only fields that exist on this product are set.
   const fillFromClient = (c) => {
@@ -162,12 +173,12 @@ function ProductForm({ product, values, onChange, errors = {}, allProducts = STA
       [nameField]:    c.client_name || '',
       address,
       postal_code:    c.postal_code || '',
-      telephone:      c.telephone || '',
-      mobile:         c.mobile_no || '',
+      telephone:      plainId(c.telephone),
+      mobile:         plainId(c.mobile_no),
       email:          c.email || '',
-      nic_no:         c.nic_proof || '',
-      business_reg:   c.business_registration || '',
-      vat_no:         c.svat_proof || '',
+      nic_no:         plainId(c.nic_proof),
+      business_reg:   plainId(c.business_registration),
+      vat_no:         plainId(c.svat_proof),
       customer_type:  c.customer_type === 'Company' ? 'Corporate' : (c.customer_type || ''),
     };
     const known = new Set(def.fields.map(x => x.name));
