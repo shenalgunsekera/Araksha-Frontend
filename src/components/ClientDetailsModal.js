@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { viewUrl, openFile } from '../storage';
+import { openFile } from '../storage';
 import { PRODUCTS } from '../config/products';
 import { db } from '../firebase';
 import { doc, updateDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
