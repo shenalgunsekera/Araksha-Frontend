@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { collection, getDocs, query, orderBy, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { confirmTypedDelete } from '../utils/confirmDelete';
-import { liveOsDays } from '../utils/osDays';
+import { liveOsDays, policyStatus } from '../utils/osDays';
 import { textFields as UW_FIELDS } from './AddClientForm';
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
@@ -85,7 +85,8 @@ const CLIENT_FIELDS = (() => {
   const skip = new Set(['date_added', 'policy_year', 'policy_month']);
   const base = UW_FIELDS.filter(f => !skip.has(f.name)).map(f => ({ key: f.name, label: f.label, type: uwType(f) }));
   const have = new Set(base.map(f => f.key));
-  return [...base, ...CLIENT_SYSTEM_FIELDS.filter(f => !have.has(f.key))];
+  const derived = [{ key: 'policy_status', label: 'Policy Status (Active / Expired)', type: 'string' }];
+  return [...base, ...derived, ...CLIENT_SYSTEM_FIELDS.filter(f => !have.has(f.key))];
 })();
 // keys to hide from the dynamic field list (internal / file URLs / JSON blobs)
 const isInternalKey = (k) =>
@@ -870,7 +871,7 @@ const ReportsPage = () => {
     ]);
     // Compute O/S Days live (counts up from policy start, 0 once paid) so reports
     // never show the stale stored snapshot or a leftover value on paid policies.
-    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, os_days: liveOsDays(c)}; }));
+    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, os_days: liveOsDays(c), policy_status: policyStatus(c)}; }));
     setClaims(clS.docs.map(d=>({id:d.id,...d.data()})));
     // Flatten quotes into report-friendly rows (a quote is "finalised" once
     // the broker converts it — status 'confirmed').

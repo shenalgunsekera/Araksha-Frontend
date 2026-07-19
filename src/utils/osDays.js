@@ -25,6 +25,18 @@ function parseDate(v) {
   return null;
 }
 
+// "Active" while the policy expiry (period-to) is today or later, "Expired" once
+// it's in the past, "" when there's no usable expiry date. Computed on read so
+// reports always reflect the current date.
+export function policyStatus(client) {
+  if (!client) return '';
+  const to = parseDate(client.policy_period_to);
+  if (!to) return '';
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  to.setHours(0, 0, 0, 0);
+  return to >= today ? 'Active' : 'Expired';
+}
+
 export function liveOsDays(client) {
   if (!client) return '';
 
