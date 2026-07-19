@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  collection, addDoc, getDocs, doc, updateDoc, deleteDoc,
+  collection, getDocs, doc, setDoc, updateDoc, deleteDoc,
   query, orderBy, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -21,6 +21,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormControl from '@mui/material/FormControl';
@@ -33,13 +34,16 @@ import Pagination from '@mui/material/Pagination';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import AddIcon from '@mui/icons-material/Add';
+import SearchIcon from '@mui/icons-material/Search';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 
 /* ── Claim process tracker: the 24-step workflow ─────────────────────────────
-   Each step has a status dropdown; a "positive" status (anything other than
-   No / Pending / blank) reveals a multi-file uploader so supporting documents
-   and images can be attached, with an Add button for more.                    */
+   Controlled component: parent owns the tracker object and decides how it is
+   persisted (immediately to Firestore on the card, or into form state in the
+   register dialog). Each step has a status dropdown; a "positive" status
+   (anything other than No / Pending / blank) reveals a multi-file uploader so
+   supporting documents and images can be attached, with an Add button for more. */
 const TRACKER_STEPS = [
   { key: 'claim_intimated',            label: 'Claim Intimated' },
   { key: 'claim_number_created',       label: 'Claim Number Created' },
@@ -68,18 +72,12 @@ const TRACKER_STEPS = [
 const YESNO = ['Yes', 'No'];
 const allowsUpload = (v) => !!v && v !== 'No' && v !== 'Pending';
 
-function ClaimProcessTracker({ claim, brandPrefix, accent }) {
-  const [tracker, setTracker] = useState(claim.process_tracker || {});
+function ClaimProcessTracker({ value, onChange, claimId, brandPrefix, accent }) {
   const [busy, setBusy] = useState('');
+  const tracker = value || {};
 
-  const persist = async (next) => {
-    setTracker(next);
-    try { await updateDoc(doc(db, 'claims', claim.id), { process_tracker: next, updated_at: serverTimestamp() }); }
-    catch (_) { /* ignore */ }
-  };
-
-  const setValue = (key, value) =>
-    persist({ ...tracker, [key]: { ...(tracker[key] || {}), value } });
+  const setValue = (key, v) =>
+    onChange({ ...tracker, [key]: { ...(tracker[key] || {}), value: v } });
 
   const addFiles = async (key, fileList) => {
     const files = Array.from(fileList || []);
@@ -88,16 +86,16 @@ function ClaimProcessTracker({ claim, brandPrefix, accent }) {
     const added = [];
     for (const file of files) {
       try {
-        const url = await uploadFile(file, `${brandPrefix}/docs/claims/${claim.id}/${key}`, undefined, file.name);
+        const url = await uploadFile(file, `${brandPrefix}/docs/claims/${claimId}/${key}`, undefined, file.name);
         added.push({ url, name: file.name });
       } catch (_) { /* skip failed file */ }
     }
-    await persist({ ...tracker, [key]: { ...(tracker[key] || {}), docs: [...(tracker[key]?.docs || []), ...added] } });
+    onChange({ ...tracker, [key]: { ...(tracker[key] || {}), docs: [...(tracker[key]?.docs || []), ...added] } });
     setBusy('');
   };
 
   const removeDoc = (key, idx) =>
-    persist({ ...tracker, [key]: { ...(tracker[key] || {}), docs: (tracker[key]?.docs || []).filter((_, i) => i !== idx) } });
+    onChange({ ...tracker, [key]: { ...(tracker[key] || {}), docs: (tracker[key]?.docs || []).filter((_, i) => i !== idx) } });
 
   const progressed = TRACKER_STEPS.filter(s => allowsUpload(tracker[s.key]?.value)).length;
 
@@ -170,6 +168,7 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
   const [settlement, setSettlement] = useState(claim.settlement_amount || '');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [tracker, setTracker] = useState(claim.process_tracker || {});
   const [core, setCore] = useState({
     client_name:   claim.client_name   || '',
     policy_no:     claim.policy_no      || '',
@@ -184,6 +183,13 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
   const filed = claim.created_at?.toDate?.()
     ? claim.created_at.toDate().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
     : '—';
+
+  // Tracker edits on the card persist to Firestore immediately.
+  const persistTracker = async (next) => {
+    setTracker(next);
+    try { await updateDoc(doc(db, 'claims', claim.id), { process_tracker: next, updated_at: serverTimestamp() }); }
+    catch (_) { /* ignore */ }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -257,13 +263,18 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
               </Button>
             </Stack>
 
-            <ClaimProcessTracker claim={claim} brandPrefix="araksha" accent="#255EAB" />
+            <ClaimProcessTracker value={tracker} onChange={persistTracker} claimId={claim.id} brandPrefix="araksha" accent="#255EAB" />
           </Box>
         </Collapse>
       </CardContent>
     </Card>
   );
 }
+
+const EMPTY_FORM = {
+  client_name:'', policy_no:'', product:'', incident_date:'',
+  cause:'', description:'', loss_amount:'',
+};
 
 const ClaimsPage = () => {
   const { user, userProfile } = useAuth();
@@ -275,10 +286,11 @@ const ClaimsPage = () => {
   const [justCreatedId, setJustCreatedId] = useState(null);
   const [cPage,    setCPage]    = useState(1);
   const C_PER_PAGE = 15;
-  const [form,     setForm]     = useState({
-    client_name:'', policy_no:'', product:'', incident_date:'',
-    cause:'', description:'', loss_amount:'',
-  });
+  const [search,   setSearch]   = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [form,     setForm]     = useState(EMPTY_FORM);
+  const [regTracker, setRegTracker] = useState({});
+  const [newClaimRef, setNewClaimRef] = useState(null);
 
   const load = useCallback(async () => {
     const q = query(collection(db,'claims'), orderBy('created_at','desc'));
@@ -289,7 +301,19 @@ const ClaimsPage = () => {
 
   useEffect(()=>{ load(); },[load]);
 
+  // Reset to first page whenever the search/filter narrows the list.
+  useEffect(()=>{ setCPage(1); },[search, statusFilter]);
+
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  // Pre-mint the claim's document id so the tracker can upload files (which
+  // need a stable storage path) before the claim doc is written.
+  const openRegister = () => {
+    setForm(EMPTY_FORM);
+    setRegTracker({});
+    setNewClaimRef(doc(collection(db,'claims')));
+    setOpen(true);
+  };
 
   const handleCreate = async () => {
     if (!form.client_name||!form.incident_date) {
@@ -297,17 +321,20 @@ const ClaimsPage = () => {
     }
     setSaving(true);
     const ref = `CLM-${Date.now().toString().slice(-6)}`;
-    const created = await addDoc(collection(db,'claims'),{
-      ...form, reference:ref, status:'Filed',
+    const claimRef = newClaimRef || doc(collection(db,'claims'));
+    await setDoc(claimRef, {
+      ...form, reference:ref, status:'Filed', process_tracker: regTracker,
       created_by: user?.uid||'', created_by_name: userProfile?.full_name||'',
       created_at: serverTimestamp(), updated_at: serverTimestamp(),
     });
     logActivity(`Registered claim ${ref}${form.client_name ? ` for ${form.client_name}` : ''}`);
-    setForm({client_name:'',policy_no:'',product:'',incident_date:'',cause:'',description:'',loss_amount:''});
+    setForm(EMPTY_FORM);
+    setRegTracker({});
+    setNewClaimRef(null);
     setOpen(false);
     setSaving(false);
-    setJustCreatedId(created.id); // auto-expand the new claim to reveal its process tracker
-    setToast({open:true, msg:'Claim registered — opening it below so you can fill the process tracker.', severity:'success'});
+    setJustCreatedId(claimRef.id); // auto-expand the new claim so the tracker is right there
+    setToast({open:true, msg:'Claim registered.', severity:'success'});
     load();
   };
 
@@ -318,6 +345,16 @@ const ClaimsPage = () => {
     rejected: claims.filter(c=>c.status==='Rejected').length,
   };
 
+  const filtered = claims.filter(c => {
+    if (statusFilter !== 'All' && c.status !== statusFilter) return false;
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    const hay = `${c.reference||''} ${c.client_name||''} ${c.policy_no||''} ${c.product||''} ${c.cause||''}`.toLowerCase();
+    return hay.includes(q);
+  });
+  const pageCount = Math.ceil(filtered.length / C_PER_PAGE);
+  const pageClaims = filtered.slice((cPage-1)*C_PER_PAGE, cPage*C_PER_PAGE);
+
   return (
     <Box className="page-enter" sx={{ maxWidth:1000, mx:'auto' }}>
       <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{sm:'center'}} sx={{mb:3}}>
@@ -325,7 +362,7 @@ const ClaimsPage = () => {
           <Typography variant="h5" sx={{ fontWeight:800, mb:0.3 }}>Claims</Typography>
           <Typography sx={{ fontSize:13, color:'#9CA3AF' }}>Register and track insurance claims</Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={()=>setOpen(true)} sx={{mt:{xs:1.5,sm:0}}}>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={openRegister} sx={{mt:{xs:1.5,sm:0}}}>
           Register Claim
         </Button>
       </Stack>
@@ -344,46 +381,64 @@ const ClaimsPage = () => {
         ))}
       </Stack>
 
+      <Stack direction={{xs:'column',sm:'row'}} spacing={1.5} sx={{mb:2.5}}>
+        <TextField size="small" fullWidth placeholder="Search by reference, client, policy or product…"
+          value={search} onChange={e=>setSearch(e.target.value)}
+          InputProps={{ startAdornment:(<InputAdornment position="start"><SearchIcon sx={{ fontSize:18, color:'#9CA3AF' }} /></InputAdornment>) }} />
+        <FormControl size="small" sx={{ minWidth:{ xs:'100%', sm:190 } }}>
+          <InputLabel>Status</InputLabel>
+          <Select value={statusFilter} label="Status" onChange={e=>setStatusFilter(e.target.value)}>
+            <MenuItem value="All">All statuses</MenuItem>
+            {Object.keys(STATUS_CONFIG).map(s=><MenuItem key={s} value={s}>{s}</MenuItem>)}
+          </Select>
+        </FormControl>
+      </Stack>
+
       {loading
         ? <Stack spacing={1.5}>{[1,2,3].map(i=><Skeleton key={i} height={64} sx={{borderRadius:'12px'}} />)}</Stack>
         : claims.length===0
           ? <Box sx={{textAlign:'center',py:6}}><Typography sx={{color:'#9CA3AF'}}>No claims registered yet.</Typography></Box>
-          : <>
-              {claims.slice((cPage-1)*C_PER_PAGE, cPage*C_PER_PAGE).map(c=>(
-                <ClaimCard key={c.id} claim={c}
-                  defaultOpen={c.id === justCreatedId}
-                  onUpdate={(id,updates)=>setClaims(p=>p.map(x=>x.id===id?{...x,...updates}:x))}
-                  onDelete={(id)=>{ setClaims(p=>p.filter(x=>x.id!==id)); setToast({open:true,msg:'Claim deleted.',severity:'info'}); }} />
-              ))}
-              {claims.length > C_PER_PAGE && (
-                <Box sx={{ display:'flex', alignItems:'center', justifyContent:'space-between', pt:2, flexWrap:'wrap', gap:1 }}>
-                  <Typography sx={{ fontSize:12.5, color:'#9CA3AF' }}>
-                    Showing {(cPage-1)*C_PER_PAGE+1}–{Math.min(cPage*C_PER_PAGE, claims.length)} of {claims.length} claims
-                  </Typography>
-                  <Pagination count={Math.ceil(claims.length/C_PER_PAGE)} page={cPage}
-                    onChange={(_,v)=>{ setCPage(v); window.scrollTo({top:0,behavior:'smooth'}); }}
-                    shape="rounded" size="small" />
-                </Box>
-              )}
-            </>
+          : filtered.length===0
+            ? <Box sx={{textAlign:'center',py:6}}><Typography sx={{color:'#9CA3AF'}}>No claims match your search.</Typography></Box>
+            : <>
+                {pageClaims.map(c=>(
+                  <ClaimCard key={c.id} claim={c}
+                    defaultOpen={c.id === justCreatedId}
+                    onUpdate={(id,updates)=>setClaims(p=>p.map(x=>x.id===id?{...x,...updates}:x))}
+                    onDelete={(id)=>{ setClaims(p=>p.filter(x=>x.id!==id)); setToast({open:true,msg:'Claim deleted.',severity:'info'}); }} />
+                ))}
+                {filtered.length > C_PER_PAGE && (
+                  <Box sx={{ display:'flex', alignItems:'center', justifyContent:'space-between', pt:2, flexWrap:'wrap', gap:1 }}>
+                    <Typography sx={{ fontSize:12.5, color:'#9CA3AF' }}>
+                      Showing {(cPage-1)*C_PER_PAGE+1}–{Math.min(cPage*C_PER_PAGE, filtered.length)} of {filtered.length} claims
+                    </Typography>
+                    <Pagination count={pageCount} page={cPage}
+                      onChange={(_,v)=>{ setCPage(v); window.scrollTo({top:0,behavior:'smooth'}); }}
+                      shape="rounded" size="small" />
+                  </Box>
+                )}
+              </>
       }
 
-      <Dialog open={open} onClose={()=>setOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={open} onClose={()=>setOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Register New Claim</DialogTitle>
         <DialogContent sx={{pt:2.5}}>
           <Stack spacing={2}>
             <TextField size="small" fullWidth label="Client Name *" value={form.client_name} onChange={e=>set('client_name',e.target.value)} />
-            <Stack direction="row" spacing={1.5}>
+            <Stack direction={{ xs:'column', sm:'row' }} spacing={1.5}>
               <TextField size="small" fullWidth label="Policy No" value={form.policy_no} onChange={e=>set('policy_no',e.target.value)} />
               <TextField size="small" fullWidth label="Product / Class" value={form.product} onChange={e=>set('product',e.target.value)} />
             </Stack>
-            <Stack direction="row" spacing={1.5}>
+            <Stack direction={{ xs:'column', sm:'row' }} spacing={1.5}>
               <TextField size="small" fullWidth label="Incident Date *" type="date" InputLabelProps={{shrink:true}} value={form.incident_date} onChange={e=>set('incident_date',e.target.value)} />
-              <TextField size="small" fullWidth label="Estimated Loss (LKR)" type="number" value={form.loss_amount} onChange={e=>set('loss_amount',e.target.value)} />
+              <TextField size="small" fullWidth label="Estimated Loss (LKR)" type="number" inputProps={{ step:'any', inputMode:'decimal' }} value={form.loss_amount} onChange={e=>set('loss_amount',e.target.value)} />
             </Stack>
             <TextField size="small" fullWidth label="Cause of Loss" value={form.cause} onChange={e=>set('cause',e.target.value)} />
             <TextField size="small" fullWidth multiline minRows={3} label="Loss Description" value={form.description} onChange={e=>set('description',e.target.value)} />
           </Stack>
+          {newClaimRef && (
+            <ClaimProcessTracker value={regTracker} onChange={setRegTracker} claimId={newClaimRef.id} brandPrefix="araksha" accent="#255EAB" />
+          )}
         </DialogContent>
         <DialogActions sx={{px:3,py:2,borderTop:'1px solid rgba(56,163,224,0.10)'}}>
           <Button onClick={()=>setOpen(false)} variant="outlined" sx={{borderColor:'#e0e0e0',color:'#6B7280'}}>Cancel</Button>

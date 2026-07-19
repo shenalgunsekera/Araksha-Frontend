@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { openFile } from '../storage';
+import { liveOsDays } from '../utils/osDays';
 import { PRODUCTS } from '../config/products';
 import { db } from '../firebase';
 import { doc, updateDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
@@ -402,7 +403,7 @@ const ClientDetailsModal = ({ client, onClose }) => {
         ['Policy Period From',    client.policy_period_from],
         ['Policy Period To',      client.policy_period_to],
         ['Policy Days',           client.policy_days],
-        ['O/S Days',              client.os_days],
+        ['O/S Days',              liveOsDays(client)],
         ['Credit Period',         client.credit_period],
         ['Quote Validity (days)', client.validity_days],
       ]);
@@ -691,7 +692,7 @@ const ClientDetailsModal = ({ client, onClose }) => {
       addSheetSection('PERIOD OF INSURANCE', [
         ['Policy No', client.policy_no], ['Policy Type', client.policy_type], ['Coverage', client.coverage],
         ['Policy Period From', client.policy_period_from], ['Policy Period To', client.policy_period_to],
-        ['Policy Days', client.policy_days], ['O/S Days', client.os_days], ['Credit Period', client.credit_period],
+        ['Policy Days', client.policy_days], ['O/S Days', liveOsDays(client)], ['Credit Period', client.credit_period],
         ['Quote Validity (days)', client.validity_days],
       ]);
       if (fiItems.length) addSheetSection('FINANCIAL INTEREST', fiItems.map(([k, v]) => [fieldNameToLabel(k), v]));
@@ -821,7 +822,7 @@ const ClientDetailsModal = ({ client, onClose }) => {
             <Grid item xs={12} sm={6} md={4}><Field label="Policy Period From"    value={client.policy_period_from} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Policy Period To"      value={client.policy_period_to} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Policy Days"           value={client.policy_days} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="O/S Days"              value={client.os_days} /></Grid>
+            <Grid item xs={12} sm={6} md={4}><Field label="O/S Days"              value={liveOsDays(client)} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Credit Period"         value={client.credit_period} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Quote Validity (days)" value={client.validity_days} /></Grid>
           </Grid>

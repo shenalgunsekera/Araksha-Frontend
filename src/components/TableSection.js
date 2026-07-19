@@ -10,6 +10,7 @@ import { uploadFile as uploadToCloudinary } from '../storage';
 import AddClientForm, { textFields as UW_FIELDS } from './AddClientForm';
 import ClientDetailsModal from './ClientDetailsModal';
 import { exportHeader, normaliseImportRow } from '../utils/csvHeaders';
+import { liveOsDays } from '../utils/osDays';
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -125,7 +126,7 @@ async function exportUnderwritingExcel(clients) {
     { key: 'product',            header: 'Policy Class',           w: 20 },
     { key: 'policy_period_to',   header: 'Policy Expiry',          w: 14, isDate: true },
     { key: '_policy_days',       header: 'Policy Days',            w: 10, derived: derivePolicyDays },
-    { key: 'os_days',            header: 'O/S Days',               w: 10 },
+    { key: 'os_days',            header: 'O/S Days',               w: 10, derived: liveOsDays },
     { key: 'credit_period',      header: 'Credit Period (days)',    w: 16 },
     // Premium
     { key: 'basic_premium',      header: 'Basic Premium (Rs)',      w: 16, isNum: true },
