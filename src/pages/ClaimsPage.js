@@ -6,6 +6,7 @@ import {
 import { db } from '../firebase';
 import { useAuth } from '../App';
 import { uploadFile, openFile } from '../storage';
+import { logActivity } from '../utils/workSession';
 
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -276,6 +277,7 @@ const ClaimsPage = () => {
       created_by: user?.uid||'', created_by_name: userProfile?.full_name||'',
       created_at: serverTimestamp(), updated_at: serverTimestamp(),
     });
+    logActivity(`Registered claim ${ref}${form.client_name ? ` for ${form.client_name}` : ''}`);
     setForm({client_name:'',policy_no:'',product:'',incident_date:'',cause:'',description:'',loss_amount:''});
     setOpen(false);
     setSaving(false);

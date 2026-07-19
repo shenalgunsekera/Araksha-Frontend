@@ -673,7 +673,7 @@ const AdminPanel = () => {
     sr++; // spacer
 
     // Detail headers
-    const detailHeaders = ['Employee','Email','Date','Clock In','Clock Out','Duration (hrs)','Notes'];
+    const detailHeaders = ['Employee','Email','Date','Clock In','Clock Out','Duration (hrs)','Activity / Notes'];
     detailHeaders.forEach((label, i) => {
       const cell = ws.getCell(sr, i + 1);
       cell.value = label; cell.font = { bold:true, size:10, color:{argb:'FF38A3E0'}, name:'Calibri' };
@@ -688,7 +688,14 @@ const AdminPanel = () => {
       const co = r.clock_out?.toDate ? r.clock_out.toDate() : null;
       const fmtTime = (d) => d ? d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }) : '—';
       const hrs = r.duration_minutes != null ? (r.duration_minutes / 60).toFixed(2) : '—';
-      [r.user_name||'—', r.user_email||'—', r.date||'—', fmtTime(ci), fmtTime(co), hrs, r.notes||''].forEach((v, i) => {
+      const activityText = [
+        r.notes || '',
+        ...[...(r.activities || [])].sort((a, b) => (a.at || '').localeCompare(b.at || '')).map(a => {
+          const t = a.at ? new Date(a.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+          return `${t ? t + ' — ' : ''}${a.action || ''}`;
+        }),
+      ].filter(Boolean).join('\n');
+      [r.user_name||'—', r.user_email||'—', r.date||'—', fmtTime(ci), fmtTime(co), hrs, activityText].forEach((v, i) => {
         const cell = ws.getCell(sr, i + 1);
         cell.value = v;
         if (i >= 3 && i <= 5) cell.alignment = { horizontal:'center' };
@@ -1305,7 +1312,7 @@ const AdminPanel = () => {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: '#0A1A3E' }}>
-                    {['Employee', 'Email', 'Date', 'Clock In', 'Clock Out', 'Duration', 'Notes'].map(h => (
+                    {['Employee', 'Email', 'Date', 'Clock In', 'Clock Out', 'Duration', 'Activity / Notes'].map(h => (
                       <th key={h} style={{ padding: '10px 14px', color: '#38A3E0', fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', fontSize: 12 }}>{h}</th>
                     ))}
                   </tr>
@@ -1335,7 +1342,21 @@ const AdminPanel = () => {
                         <td style={{ padding: '9px 14px', whiteSpace: 'nowrap', fontWeight: 600, color: active ? '#f59e0b' : '#0A1A3E' }}>
                           {active ? 'In progress' : (dur || '—')}
                         </td>
-                        <td style={{ padding: '9px 14px', color: '#9CA3AF', fontSize: 12 }}>{s.notes || ''}</td>
+                        <td style={{ padding: '9px 14px', color: '#6B7280', fontSize: 12, minWidth: 240 }}>
+                          {s.notes ? <div style={{ marginBottom: (s.activities || []).length ? 4 : 0 }}>{s.notes}</div> : null}
+                          {(s.activities || []).length > 0 ? (
+                            <div style={{ maxHeight: 130, overflowY: 'auto' }}>
+                              {[...s.activities].sort((a, b) => (a.at || '').localeCompare(b.at || '')).map((a, ai) => (
+                                <div key={ai} style={{ display: 'flex', gap: 6, lineHeight: 1.55 }}>
+                                  <span style={{ color: '#7C93B0', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                                    {a.at ? new Date(a.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                  </span>
+                                  <span style={{ color: '#374151' }}>{a.action}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (!s.notes ? '—' : null)}
+                        </td>
                       </tr>
                     );
                   })}

@@ -11,6 +11,7 @@ import { PRODUCTS as STATIC_PRODUCTS } from '../config/products';
 import { COUNTRIES } from '../config/countries';
 import emailjs from '@emailjs/browser';
 import { uploadFile as uploadToCloudinary, openFile } from '../storage';
+import { logActivity } from '../utils/workSession';
 import { generateComparisonPdf } from '../utils/comparisonPdf';
 import { evaluateAutoCalc, describeAutoCalc } from '../utils/autoCalc';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -2177,6 +2178,7 @@ const QuotationsPage = () => {
         created_at:      serverTimestamp(),
         updated_at:      serverTimestamp(),
       });
+      logActivity(`Created quote ${reference}${customerName ? ` for ${customerName}` : ''}`);
       // Optimistic update — add draft to local state immediately
       setQuotes(prev => [{
         id: ref.id, reference, product_key: product,
@@ -2263,6 +2265,7 @@ const QuotationsPage = () => {
       await updateDoc(doc(db, 'quotes', pendingQuote.id), {
         sent_to: sentTo, status: 'sent', updated_at: serverTimestamp(),
       });
+      logActivity(`Sent quote ${pendingQuote.reference} to ${sentTo.length} insurer${sentTo.length > 1 ? 's' : ''}`);
 
       // Optimistic update — mark as sent in local state immediately
       setQuotes(prev => prev.map(q =>

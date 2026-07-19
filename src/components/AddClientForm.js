@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { collection, addDoc, doc, updateDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { uploadFile as uploadToCloudinary, openFile } from '../storage';
+import { logActivity } from '../utils/workSession';
 import { useAuth } from '../App';
 import { PRODUCTS } from '../config/products';
 import { evaluateAutoCalc, describeAutoCalc } from '../utils/autoCalc';
@@ -657,6 +658,7 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
           ...(initialData.source_quote_id ? { source_quote_id: initialData.source_quote_id } : {}),
         });
       }
+      logActivity(`${isEdit ? 'Updated' : 'Added'} policy${fields.client_name ? ` for ${fields.client_name}` : ''}${fields.araksha_ib_file_no ? ` (${fields.araksha_ib_file_no})` : ''}`);
       onSuccess?.();
     } catch (err) {
       setError(err.message || 'Failed to save client');
