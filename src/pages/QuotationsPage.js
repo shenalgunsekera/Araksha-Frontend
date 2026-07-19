@@ -70,6 +70,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 
 const EMAILJS_SERVICE           = process.env.REACT_APP_EMAILJS_SERVICE_ID           || '';
 const EMAILJS_TEMPLATE          = process.env.REACT_APP_EMAILJS_TEMPLATE_ID          || '';
@@ -720,12 +721,20 @@ function QuoteDetailsDialog({ quote, onClose, allProducts = STATIC_PRODUCTS }) {
   );
 }
 
-function QuoteRow({ quote, onSelect, tab, onDelete, onResend, isManager, allProducts = STATIC_PRODUCTS }) {
+function QuoteRow({ quote, onSelect, onEdit, tab, onDelete, onResend, isManager, allProducts = STATIC_PRODUCTS }) {
   const [open, setOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const product = allProducts[quote.product_key];
   const sentCount = quote.sent_to?.length || 0;
   const respondedCount = quote.responses?.length || 0;
+
+  const isIncoming = tab === 'incoming';
+  // Where this incoming request came from (shown as a banner on the Incoming tab).
+  const origin = quote.marketer_id
+    ? { icon: '👤', text: `From marketer: ${quote.marketer_name || quote.marketer_id}${quote.source === 'marketer' ? '' : ' (affiliate link)'}`, grad: 'linear-gradient(90deg,#7c3aed,#a855f7)' }
+    : quote.source === 'website'
+      ? { icon: '🌐', text: 'From website — direct customer request', grad: 'linear-gradient(90deg,#255EAB,#38A3E0)' }
+      : { icon: '📝', text: 'Draft — created in-house, not yet sent', grad: 'linear-gradient(90deg,#6B7280,#9CA3AF)' };
 
   const created = quote.created_at?.toDate?.()
     ? quote.created_at.toDate().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -737,7 +746,18 @@ function QuoteRow({ quote, onSelect, tab, onDelete, onResend, isManager, allProd
   const brokerCompany  = quote.selected_company || quote.customer_selection?.company_name || '';
 
   return (
-    <Card sx={{ mb: 1.5, border: `1px solid ${hasSelection ? 'rgba(16,185,129,0.35)' : 'rgba(56,163,224,0.12)'}`, boxShadow: hasSelection ? '0 0 0 2px rgba(16,185,129,0.08)' : 'none' }}>
+    <Card sx={{ mb: 1.5, border: `1px solid ${hasSelection ? 'rgba(16,185,129,0.35)' : isIncoming ? 'rgba(37,94,171,0.30)' : 'rgba(56,163,224,0.12)'}`, boxShadow: hasSelection ? '0 0 0 2px rgba(16,185,129,0.08)' : 'none' }}>
+      {isIncoming && (
+        <Box sx={{ background: origin.grad, px: 2.5, py: 0.9, display: 'flex', alignItems: 'center', gap: 1.2 }}>
+          <Box sx={{ fontSize: 15 }}>{origin.icon}</Box>
+          <Typography sx={{ fontWeight: 700, fontSize: 12.5, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {origin.text}
+          </Typography>
+          <Typography sx={{ fontSize: 10.5, color: 'rgba(255,255,255,0.85)', ml: 'auto', flexShrink: 0, whiteSpace: 'nowrap', pl: 1 }}>
+            needs review before sending
+          </Typography>
+        </Box>
+      )}
       {hasSelection && (
         // When both the broker has confirmed AND the customer has selected, the two
         // banners sit side-by-side (half each); otherwise the single banner is full width.
@@ -807,6 +827,13 @@ function QuoteRow({ quote, onSelect, tab, onDelete, onResend, isManager, allProd
               sx={{ fontSize: 11, py: 0.4, borderColor: 'rgba(99,102,241,0.35)', color: '#6366f1', flexShrink: 0 }}>
               View
             </Button>
+            {isIncoming && onEdit && (
+              <Button size="small" variant="contained" startIcon={<EditOutlinedIcon sx={{ fontSize: 15 }} />}
+                onClick={e => { e.stopPropagation(); onEdit(quote); }}
+                sx={{ fontSize: 11, py: 0.4, flexShrink: 0, background: 'linear-gradient(135deg,#255EAB,#38A3E0)', boxShadow: 'none' }}>
+                Edit &amp; Send
+              </Button>
+            )}
             {(tab === 'received' || tab === 'sent') && sentCount > 0 && (
               <Chip
                 label={`${respondedCount}/${sentCount} received`}
@@ -2024,6 +2051,7 @@ const QuotationsPage = () => {
   const [unfinalisedOnly, setUnfinalisedOnly] = useState(false);
   const [deleteTarget,   setDeleteTarget]   = useState(null);
   const [deleting,       setDeleting]       = useState(false);
+  const [editingQuoteId, setEditingQuoteId] = useState(null); // editing an incoming/website draft before sending
   const [fieldErrors,    setFieldErrors]    = useState({});
   const [valIssues,      setValIssues]      = useState({ missing: [], invalid: [] });
   const [valOpen,        setValOpen]        = useState(false);
@@ -2055,6 +2083,7 @@ const QuotationsPage = () => {
   // Auto-save draft to localStorage while form is open
   useEffect(() => {
     if (!newQuoteOpen) return;
+    if (editingQuoteId) return; // editing an existing quote — don't treat it as a new-quote draft
     if (Object.keys(formValues).length === 0) return;
     clearTimeout(draftTimerRef.current);
     draftTimerRef.current = setTimeout(() => {
@@ -2064,7 +2093,7 @@ const QuotationsPage = () => {
       } catch (_) {}
     }, 800);
     return () => clearTimeout(draftTimerRef.current);
-  }, [formValues, product, newQuoteOpen]);
+  }, [formValues, product, newQuoteOpen, editingQuoteId]);
 
   // Load companies
   useEffect(() => {
@@ -2142,6 +2171,9 @@ const QuotationsPage = () => {
     () => quotes.filter(q => q.not_finalised === true).length,
     [quotes]);
 
+  // Incoming = not yet sent to any insurer. This is where website & marketer
+  // submissions land so staff can review, edit, and forward them to insurers.
+  const incomingQuotes = filteredQuotes.filter(q => (q.sent_to?.length || 0) === 0);
   const sentQuotes     = filteredQuotes.filter(q => (q.sent_to?.length || 0) > 0);
   const receivedQuotes = filteredQuotes.filter(q => (q.responses?.length || 0) > 0);
   const compareQuotes  = receivedQuotes; // only quotes with at least 1 response can be compared
@@ -2150,6 +2182,30 @@ const QuotationsPage = () => {
     setFormValues(v => ({ ...v, [name]: val }));
     setFieldErrors(e => { const n = { ...e }; delete n[name]; return n; });
   }, []);
+
+  // Open the New/Edit Quote dialog pre-filled with an incoming quote's details
+  // (from the website or a marketer) so staff can review/edit before sending it
+  // on to the insurers.
+  const openEditQuote = (quote) => {
+    setEditingQuoteId(quote.id);
+    setProduct(quote.product_key || 'fire');
+    setFormValues({ ...(quote.form_data || {}) });
+    setFieldErrors({});
+    setDraftBanner(null);
+    setNewQuoteOpen(true);
+  };
+
+  const closeQuoteDialog = () => {
+    if (editingQuoteId) {
+      // Editing an existing quote — discard nothing to the draft store, just close.
+      setEditingQuoteId(null);
+      setFormValues({});
+      setFieldErrors({});
+    } else {
+      flushDraftSave();
+    }
+    setNewQuoteOpen(false);
+  };
 
   const handleCreateQuote = async () => {
     const { errors, missing, invalid } = validateForm(product, formValues, allP);
@@ -2164,6 +2220,32 @@ const QuotationsPage = () => {
     setSaving(true);
     try {
       const customerName = formValues[allP[product]?.customerNameField || ''] || '';
+
+      // Editing an incoming/website draft: update its details in place, keep its
+      // reference and origin, then jump straight to insurer selection to send it.
+      if (editingQuoteId) {
+        const existing = quotes.find(q => q.id === editingQuoteId);
+        const reference = existing?.reference || formValues.ceilao_ib_file_no || genRef(product, customerName, allP);
+        const form_data = { ...formValues, ceilao_ib_file_no: formValues.ceilao_ib_file_no || reference };
+        await updateDoc(doc(db, 'quotes', editingQuoteId), {
+          product_key:   product,
+          product_label: allP[product]?.label || product,
+          form_data,
+          updated_at:    serverTimestamp(),
+        });
+        logActivity(`Edited quote ${reference}${customerName ? ` for ${customerName}` : ''}`);
+        setQuotes(prev => prev.map(q => q.id === editingQuoteId
+          ? { ...q, product_key: product, product_label: allP[product]?.label || product, form_data }
+          : q));
+        setPendingQuote({ id: editingQuoteId, reference, form_data, product_key: product });
+        setEditingQuoteId(null);
+        setNewQuoteOpen(false);
+        setSendOpen(true);
+        setFormValues({});
+        setSaving(false);
+        return;
+      }
+
       const reference = genRef(product, customerName, allP);
       const ref = await addDoc(collection(db, 'quotes'), {
         reference,
@@ -2280,7 +2362,7 @@ const QuotationsPage = () => {
       } else {
         setToast({ open: true, msg: `Quote request sent to ${sentTo.length} insurer${sentTo.length > 1 ? 's' : ''}!`, severity: 'success' });
       }
-      setTab(0);
+      setTab(1); // jump to the Sent tab
     } catch (err) {
       setToast({ open: true, msg: err.message, severity: 'error' });
     }
@@ -2603,7 +2685,7 @@ const QuotationsPage = () => {
     });
   };
 
-  const tabQuotes = [sentQuotes, receivedQuotes, compareQuotes];
+  const tabQuotes = [incomingQuotes, sentQuotes, receivedQuotes, compareQuotes];
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -2761,6 +2843,7 @@ const QuotationsPage = () => {
               '& .Mui-selected': { color: '#255EAB' },
               '& .MuiTabs-indicator': { background: 'linear-gradient(90deg,#255EAB,#38A3E0)', height: 2.5 },
             }}>
+              <Tab label={`🌐 Incoming (${incomingQuotes.length})`} />
               <Tab label={`Sent (${sentQuotes.length})`} />
               <Tab label={`Received (${receivedQuotes.length})`} />
               <Tab label={`Compare (${compareQuotes.length})`} />
@@ -2769,18 +2852,19 @@ const QuotationsPage = () => {
             {tabQuotes[tab].length === 0 ? (
               <Box sx={{ textAlign: 'center', py: 6 }}>
                 <Typography sx={{ color: '#9CA3AF', fontWeight: 600 }}>
-                  {tab === 0 ? 'No sent quote requests yet.' : tab === 1 ? 'No responses received yet.' : 'No quotes with responses to compare yet.'}
+                  {tab === 0 ? 'No incoming quotes waiting.' : tab === 1 ? 'No sent quote requests yet.' : tab === 2 ? 'No responses received yet.' : 'No quotes with responses to compare yet.'}
                 </Typography>
                 <Typography sx={{ fontSize: 12.5, color: '#A9B6C8', mt: 0.5 }}>
-                  {tab === 0 ? 'Click "New Quote Request" to get started.' : tab === 1 ? 'Responses appear here once insurers submit their quotes.' : 'Quotes move here once at least one insurer responds.'}
+                  {tab === 0 ? 'Website & marketer submissions and unsent drafts appear here to review and send.' : tab === 1 ? 'Click "New Quote Request" to get started.' : tab === 2 ? 'Responses appear here once insurers submit their quotes.' : 'Quotes move here once at least one insurer responds.'}
                 </Typography>
               </Box>
             ) : (
               <>
                 {tabQuotes[tab].slice((qPage-1)*Q_PER_PAGE, qPage*Q_PER_PAGE).map(q => (
                   <QuoteRow key={q.id} quote={q}
-                    tab={tab === 0 ? 'sent' : tab === 1 ? 'received' : 'compare'}
+                    tab={tab === 0 ? 'incoming' : tab === 1 ? 'sent' : tab === 2 ? 'received' : 'compare'}
                     onSelect={setCompareQuote}
+                    onEdit={openEditQuote}
                     onDelete={q => setDeleteTarget(q)}
                     onResend={handleResendEmails}
                     isManager={userProfile?.role === 'manager' || userProfile?.role === 'admin'}
@@ -2802,11 +2886,16 @@ const QuotationsPage = () => {
         )}
 
         {/* ── New Quote Dialog ── */}
-        <Dialog open={newQuoteOpen} onClose={() => { flushDraftSave(); setNewQuoteOpen(false); }} maxWidth="md" fullWidth>
+        <Dialog open={newQuoteOpen} onClose={closeQuoteDialog} maxWidth="md" fullWidth>
           <DialogTitle>
-            New Quote Request
+            {editingQuoteId ? 'Edit Quote — review & send to insurers' : 'New Quote Request'}
           </DialogTitle>
           <DialogContent sx={{ pt: 2.5 }}>
+            {editingQuoteId && (
+              <Alert severity="info" sx={{ mb: 2.5, fontSize: 12.5 }}>
+                Editing an incoming request. Update any details as needed, then continue to pick the insurers to send it to.
+              </Alert>
+            )}
             {/* Draft restore banner */}
             {draftBanner && (
               <Alert
@@ -2865,7 +2954,7 @@ const QuotationsPage = () => {
             <ProductForm product={product} values={formValues} onChange={setField} errors={fieldErrors} allProducts={allP} clients={clients} />
           </DialogContent>
           <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid rgba(56,163,224,0.10)' }}>
-            <Button onClick={() => { flushDraftSave(); setNewQuoteOpen(false); }} variant="outlined"
+            <Button onClick={closeQuoteDialog} variant="outlined"
               sx={{ borderColor: '#e0e0e0', color: '#6B7280' }}>Cancel</Button>
             <Button variant="contained" onClick={handleCreateQuote} disabled={saving}>
               {saving ? 'Saving…' : 'Save & Select Insurers →'}
