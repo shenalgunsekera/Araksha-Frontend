@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  collection, getDocs, deleteDoc, doc, query, orderBy, writeBatch, updateDoc
+  collection, getDocs, deleteDoc, doc, writeBatch, updateDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { confirmTypedDelete } from '../utils/confirmDelete';
@@ -63,6 +63,20 @@ function fmtDateUW(v) {
   if (!v) return '';
   if (v?.toDate) return v.toDate().toLocaleDateString('en-GB');
   const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleDateString('en-GB');
+}
+
+// Normalise a client's "added" time to millis for newest-first sorting, tolerant
+// of Firestore Timestamps, JS Dates, ISO strings, and missing values — legacy and
+// imported records store created_at inconsistently, which breaks Firestore's own
+// orderBy (it groups by type and drops docs missing the field).
+function clientAddedMillis(c) {
+  const v = c.created_at ?? c.submitted_at;
+  if (!v) return 0;
+  if (v.toDate) return v.toDate().getTime();
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === 'object' && typeof v.seconds === 'number') return v.seconds * 1000;
+  const t = new Date(v).getTime();
+  return isNaN(t) ? 0 : t;
 }
 
 function deriveYear(client) {
@@ -412,9 +426,11 @@ const TableSection = () => {
       setLoading(true);
     }
     try {
-      const q = query(collection(db, 'clients'), orderBy('created_at', 'desc'));
-      const snap = await getDocs(q);
-      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const snap = await getDocs(collection(db, 'clients'));
+      const all = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => clientAddedMillis(b) - clientAddedMillis(a)); // newest added first
+
       // Employees only see approved clients + their own pending/rejected
       const data = isPrivileged
         ? all
