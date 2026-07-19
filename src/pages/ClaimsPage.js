@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  collection, addDoc, getDocs, doc, updateDoc,
+  collection, addDoc, getDocs, doc, updateDoc, deleteDoc,
   query, orderBy, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../App';
 import { uploadFile, openFile } from '../storage';
 import { logActivity } from '../utils/workSession';
+import { confirmTypedDelete } from '../utils/confirmDelete';
 
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -162,12 +163,23 @@ const STATUS_CONFIG = {
   'Rejected':     { color: '#dc2626', bg: 'rgba(239,68,68,0.10)'  },
 };
 
-function ClaimCard({ claim, onUpdate }) {
-  const [open, setOpen] = useState(false);
+function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [status, setStatus] = useState(claim.status);
   const [notes, setNotes] = useState(claim.notes || '');
   const [settlement, setSettlement] = useState(claim.settlement_amount || '');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [core, setCore] = useState({
+    client_name:   claim.client_name   || '',
+    policy_no:     claim.policy_no      || '',
+    product:       claim.product        || '',
+    incident_date: claim.incident_date  || '',
+    cause:         claim.cause          || '',
+    loss_amount:   claim.loss_amount    || '',
+    description:   claim.description     || '',
+  });
+  const setC = (k, v) => setCore(c => ({ ...c, [k]: v }));
   const s = STATUS_CONFIG[claim.status] || STATUS_CONFIG['Filed'];
   const filed = claim.created_at?.toDate?.()
     ? claim.created_at.toDate().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
@@ -175,11 +187,20 @@ function ClaimCard({ claim, onUpdate }) {
 
   const save = async () => {
     setSaving(true);
-    await updateDoc(doc(db, 'claims', claim.id), {
-      status, notes, settlement_amount: settlement, updated_at: serverTimestamp(),
-    });
-    onUpdate(claim.id, { status, notes, settlement_amount: settlement });
+    const patch = { ...core, status, notes, settlement_amount: settlement, updated_at: serverTimestamp() };
+    await updateDoc(doc(db, 'claims', claim.id), patch);
+    onUpdate(claim.id, { ...core, status, notes, settlement_amount: settlement });
     setSaving(false);
+  };
+
+  const del = async () => {
+    if (!confirmTypedDelete(`Delete claim ${claim.reference}${claim.client_name ? ` (${claim.client_name})` : ''}? This removes the claim and its process tracker.`)) return;
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'claims', claim.id));
+      logActivity(`Deleted claim ${claim.reference}`);
+      onDelete?.(claim.id);
+    } catch (_) { setDeleting(false); }
   };
 
   return (
@@ -204,18 +225,15 @@ function ClaimCard({ claim, onUpdate }) {
         </Box>
         <Collapse in={open} timeout={220} unmountOnExit>
           <Box sx={{ px:2.5, pb:2.5, pt:0.5, borderTop:'1px solid rgba(56,163,224,0.08)' }}>
-            <Box sx={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:1.5, mb:2 }}>
-              {[
-                ['Incident Date', claim.incident_date],
-                ['Cause of Loss', claim.cause],
-                ['Product / Class', claim.product],
-                ['Loss Description', claim.description],
-              ].filter(([,v])=>v).map(([l,v])=>(
-                <Box key={l}>
-                  <Typography sx={{ fontSize:10.5, fontWeight:700, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:0.5 }}>{l}</Typography>
-                  <Typography sx={{ fontSize:13, color:'#0A1A3E' }}>{v}</Typography>
-                </Box>
-              ))}
+            <Typography sx={{ fontSize:11, fontWeight:800, color:'#255EAB', textTransform:'uppercase', letterSpacing:1, mb:1 }}>Claim Details</Typography>
+            <Box sx={{ display:'grid', gridTemplateColumns:{ xs:'1fr', sm:'1fr 1fr' }, gap:1.5, mb:2 }}>
+              <TextField size="small" label="Client Name" value={core.client_name} onChange={e=>setC('client_name', e.target.value)} />
+              <TextField size="small" label="Policy No" value={core.policy_no} onChange={e=>setC('policy_no', e.target.value)} />
+              <TextField size="small" label="Product / Class" value={core.product} onChange={e=>setC('product', e.target.value)} />
+              <TextField size="small" label="Incident Date" type="date" InputLabelProps={{ shrink:true }} value={core.incident_date} onChange={e=>setC('incident_date', e.target.value)} />
+              <TextField size="small" label="Estimated Loss (LKR)" type="number" inputProps={{ step:'any', inputMode:'decimal' }} value={core.loss_amount} onChange={e=>setC('loss_amount', e.target.value)} />
+              <TextField size="small" label="Cause of Loss" value={core.cause} onChange={e=>setC('cause', e.target.value)} />
+              <TextField size="small" label="Loss Description" multiline minRows={2} sx={{ gridColumn:{ sm:'1 / -1' } }} value={core.description} onChange={e=>setC('description', e.target.value)} />
             </Box>
             <Stack direction={{ xs:'column', sm:'row' }} spacing={1.5} alignItems="flex-start">
               <FormControl size="small" sx={{ minWidth:160 }}>
@@ -224,12 +242,18 @@ function ClaimCard({ claim, onUpdate }) {
                   {Object.keys(STATUS_CONFIG).map(s=><MenuItem key={s} value={s}>{s}</MenuItem>)}
                 </Select>
               </FormControl>
-              <TextField size="small" label="Settlement Amount (LKR)" type="number"
+              <TextField size="small" label="Settlement Amount (LKR)" type="number" inputProps={{ step:'any', inputMode:'decimal' }}
                 value={settlement} onChange={e=>setSettlement(e.target.value)} />
               <TextField size="small" label="Internal Notes" multiline minRows={2} fullWidth
                 value={notes} onChange={e=>setNotes(e.target.value)} />
-              <Button variant="contained" size="small" onClick={save} disabled={saving} sx={{ alignSelf:'flex-end', flexShrink:0 }}>
-                {saving ? 'Saving…' : 'Save'}
+            </Stack>
+            <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mt:1.5 }}>
+              <Button variant="outlined" color="error" size="small" onClick={del} disabled={deleting || saving}
+                sx={{ borderColor:'rgba(239,68,68,0.4)' }}>
+                {deleting ? 'Deleting…' : 'Delete Claim'}
+              </Button>
+              <Button variant="contained" size="small" onClick={save} disabled={saving || deleting}>
+                {saving ? 'Saving…' : 'Save Changes'}
               </Button>
             </Stack>
 
@@ -248,6 +272,7 @@ const ClaimsPage = () => {
   const [open,     setOpen]     = useState(false);
   const [saving,   setSaving]   = useState(false);
   const [toast,    setToast]    = useState({ open:false, msg:'', severity:'success' });
+  const [justCreatedId, setJustCreatedId] = useState(null);
   const [cPage,    setCPage]    = useState(1);
   const C_PER_PAGE = 15;
   const [form,     setForm]     = useState({
@@ -272,7 +297,7 @@ const ClaimsPage = () => {
     }
     setSaving(true);
     const ref = `CLM-${Date.now().toString().slice(-6)}`;
-    await addDoc(collection(db,'claims'),{
+    const created = await addDoc(collection(db,'claims'),{
       ...form, reference:ref, status:'Filed',
       created_by: user?.uid||'', created_by_name: userProfile?.full_name||'',
       created_at: serverTimestamp(), updated_at: serverTimestamp(),
@@ -281,7 +306,8 @@ const ClaimsPage = () => {
     setForm({client_name:'',policy_no:'',product:'',incident_date:'',cause:'',description:'',loss_amount:''});
     setOpen(false);
     setSaving(false);
-    setToast({open:true, msg:'Claim registered successfully!', severity:'success'});
+    setJustCreatedId(created.id); // auto-expand the new claim to reveal its process tracker
+    setToast({open:true, msg:'Claim registered — opening it below so you can fill the process tracker.', severity:'success'});
     load();
   };
 
@@ -324,7 +350,10 @@ const ClaimsPage = () => {
           ? <Box sx={{textAlign:'center',py:6}}><Typography sx={{color:'#9CA3AF'}}>No claims registered yet.</Typography></Box>
           : <>
               {claims.slice((cPage-1)*C_PER_PAGE, cPage*C_PER_PAGE).map(c=>(
-                <ClaimCard key={c.id} claim={c} onUpdate={(id,updates)=>setClaims(p=>p.map(x=>x.id===id?{...x,...updates}:x))} />
+                <ClaimCard key={c.id} claim={c}
+                  defaultOpen={c.id === justCreatedId}
+                  onUpdate={(id,updates)=>setClaims(p=>p.map(x=>x.id===id?{...x,...updates}:x))}
+                  onDelete={(id)=>{ setClaims(p=>p.filter(x=>x.id!==id)); setToast({open:true,msg:'Claim deleted.',severity:'info'}); }} />
               ))}
               {claims.length > C_PER_PAGE && (
                 <Box sx={{ display:'flex', alignItems:'center', justifyContent:'space-between', pt:2, flexWrap:'wrap', gap:1 }}>
