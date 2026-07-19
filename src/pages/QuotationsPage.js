@@ -143,11 +143,36 @@ function genRef(productKey, customerName, allProducts = STATIC_PRODUCTS) {
 }
 
 /* ── dynamic product form ─────────────────────────────────────────────────── */
-function ProductForm({ product, values, onChange, errors = {}, allProducts = STATIC_PRODUCTS }) {
+function ProductForm({ product, values, onChange, errors = {}, allProducts = STATIC_PRODUCTS, clients = [] }) {
   const [fileUploading, setFileUploading] = useState({});
   const [fileErrors,    setFileErrors]    = useState({});
   const def = allProducts[product];
   if (!def) return null;
+
+  const nameField = def.customerNameField || 'proposer_name';
+
+  // Fill the proposer details from a matched existing client (from the
+  // `clients` collection). Only fields that exist on this product are set.
+  const fillFromClient = (c) => {
+    if (!c) return;
+    const address = [c.street1, c.street2, c.city, c.district, c.province].filter(Boolean).join(', ');
+    const mapped = {
+      [nameField]:    c.client_name || '',
+      address,
+      postal_code:    c.postal_code || '',
+      telephone:      c.telephone || '',
+      mobile:         c.mobile_no || '',
+      email:          c.email || '',
+      nic_no:         c.nic_proof || '',
+      business_reg:   c.business_registration || '',
+      vat_no:         c.svat_proof || '',
+      customer_type:  c.customer_type === 'Company' ? 'Corporate' : (c.customer_type || ''),
+    };
+    const known = new Set(def.fields.map(x => x.name));
+    Object.entries(mapped).forEach(([k, v]) => {
+      if (v && (k === nameField || known.has(k))) onChange(k, v);
+    });
+  };
 
   // Group fields by section
   const sections = [];
@@ -177,6 +202,45 @@ function ProductForm({ product, values, onChange, errors = {}, allProducts = STA
     const gridStyle = isFullWidth ? { gridColumn: '1 / -1' } : {};
     const hasErr  = !!errors[f.name];
     const errMsg  = errors[f.name];
+
+    // Name of Insured — suggest existing clients as you type; pick one to
+    // auto-fill all proposer details from the client record.
+    if (f.name === nameField && clients.length > 0) {
+      return (
+        <Box key={f.name} sx={gridStyle}>
+          <Autocomplete
+            freeSolo
+            options={clients}
+            getOptionLabel={(o) => (typeof o === 'string' ? o : (o.client_name || ''))}
+            filterOptions={(opts, state) => {
+              const q = (state.inputValue || '').trim().toLowerCase();
+              if (!q) return [];
+              return opts.filter(o => (o.client_name || '').toLowerCase().includes(q)).slice(0, 8);
+            }}
+            inputValue={values[f.name] || ''}
+            onInputChange={(_, val, reason) => { if (reason !== 'reset') onChange(f.name, val); }}
+            onChange={(_, val) => { if (val && typeof val === 'object') fillFromClient(val); }}
+            isOptionEqualToValue={(o, v) => o.id === v.id}
+            renderOption={(props, o) => (
+              <li {...props} key={o.id}>
+                <Box>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{o.client_name}</Typography>
+                  <Typography sx={{ fontSize: 11, color: '#9CA3AF' }}>
+                    {[o.nic_proof || o.business_registration, o.mobile_no || o.telephone].filter(Boolean).join(' · ') || 'Existing client'}
+                  </Typography>
+                </Box>
+              </li>
+            )}
+            renderInput={(params) => (
+              <TextField {...params} size="small" fullWidth
+                label={f.label + (f.required ? ' *' : '')}
+                error={hasErr}
+                helperText={errMsg || 'Type to match an existing client and auto-fill their details'} />
+            )}
+          />
+        </Box>
+      );
+    }
 
     // Multi-select (chips)
     if (f.multiSelect || f.type === 'multiselect') {
@@ -2008,6 +2072,14 @@ const QuotationsPage = () => {
       .catch(() => {});
   }, []);
 
+  // Existing clients — used to auto-suggest & auto-fill the proposer details.
+  const [clients, setClients] = useState([]);
+  useEffect(() => {
+    getDocs(collection(db, 'clients'))
+      .then(snap => setClients(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(c => c.client_name)))
+      .catch(() => {});
+  }, []);
+
   // Real-time quotes listener
   useEffect(() => {
     const q = query(collection(db, 'quotes'), orderBy('created_at', 'desc'));
@@ -2787,7 +2859,7 @@ const QuotationsPage = () => {
               ))}
             </Box>
 
-            <ProductForm product={product} values={formValues} onChange={setField} errors={fieldErrors} allProducts={allP} />
+            <ProductForm product={product} values={formValues} onChange={setField} errors={fieldErrors} allProducts={allP} clients={clients} />
           </DialogContent>
           <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid rgba(56,163,224,0.10)' }}>
             <Button onClick={() => { flushDraftSave(); setNewQuoteOpen(false); }} variant="outlined"

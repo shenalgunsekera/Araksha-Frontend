@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../App';
+import { uploadFile, openFile } from '../storage';
 
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -30,6 +31,126 @@ import Pagination from '@mui/material/Pagination';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import AddIcon from '@mui/icons-material/Add';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+
+/* ── Claim process tracker: the 24-step workflow ─────────────────────────────
+   Each step has a status dropdown; a "positive" status (anything other than
+   No / Pending / blank) reveals a multi-file uploader so supporting documents
+   and images can be attached, with an Add button for more.                    */
+const TRACKER_STEPS = [
+  { key: 'claim_intimated',            label: 'Claim Intimated' },
+  { key: 'claim_number_created',       label: 'Claim Number Created' },
+  { key: 'surveyor_assigned',          label: 'Surveyor / Inspection Assigned' },
+  { key: 'inspection_completed',       label: 'Inspection Completed' },
+  { key: 'documents_requested',        label: 'Documents Requested' },
+  { key: 'customer_informed',          label: 'Customer Informed' },
+  { key: 'documents_received',         label: 'Documents Received' },
+  { key: 'documents_verified',         label: 'Documents Verified' },
+  { key: 'documents_submitted_insurer',label: 'Documents Submitted to Insurer' },
+  { key: 'claim_under_assessment',     label: 'Claim Under Assessment', options: ['Pending', 'In Progress', 'Completed'] },
+  { key: 'further_queries_raised',     label: 'Further Queries Raised' },
+  { key: 'query_response_submitted',   label: 'Query Response Submitted' },
+  { key: 'offer_received',             label: 'Offer Received' },
+  { key: 'dispute_raised',             label: 'Dispute Raised' },
+  { key: 'negotiation_history',        label: 'Negotiation History', options: ['Ongoing', 'Concluded'] },
+  { key: 'final_offer_received',       label: 'Final Offer Received' },
+  { key: 'customer_acceptance',        label: 'Customer Acceptance' },
+  { key: 'payment_released',           label: 'Payment Released' },
+  { key: 'payment_received',           label: 'Payment Received' },
+  { key: 'receipt_issued',             label: 'Receipt Issued' },
+  { key: 'claim_closed',               label: 'Claim Closed' },
+  { key: 'customer_satisfaction_survey',label: 'Customer Satisfaction Survey' },
+  { key: 'lessons_learned',            label: 'Lessons Learned' },
+];
+const YESNO = ['Yes', 'No'];
+const allowsUpload = (v) => !!v && v !== 'No' && v !== 'Pending';
+
+function ClaimProcessTracker({ claim, brandPrefix, accent }) {
+  const [tracker, setTracker] = useState(claim.process_tracker || {});
+  const [busy, setBusy] = useState('');
+
+  const persist = async (next) => {
+    setTracker(next);
+    try { await updateDoc(doc(db, 'claims', claim.id), { process_tracker: next, updated_at: serverTimestamp() }); }
+    catch (_) { /* ignore */ }
+  };
+
+  const setValue = (key, value) =>
+    persist({ ...tracker, [key]: { ...(tracker[key] || {}), value } });
+
+  const addFiles = async (key, fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setBusy(key);
+    const added = [];
+    for (const file of files) {
+      try {
+        const url = await uploadFile(file, `${brandPrefix}/docs/claims/${claim.id}/${key}`, undefined, file.name);
+        added.push({ url, name: file.name });
+      } catch (_) { /* skip failed file */ }
+    }
+    await persist({ ...tracker, [key]: { ...(tracker[key] || {}), docs: [...(tracker[key]?.docs || []), ...added] } });
+    setBusy('');
+  };
+
+  const removeDoc = (key, idx) =>
+    persist({ ...tracker, [key]: { ...(tracker[key] || {}), docs: (tracker[key]?.docs || []).filter((_, i) => i !== idx) } });
+
+  const progressed = TRACKER_STEPS.filter(s => allowsUpload(tracker[s.key]?.value)).length;
+
+  return (
+    <Box sx={{ mt: 2, pt: 2, borderTop: '1px dashed rgba(0,0,0,0.12)' }}>
+      <Typography sx={{ fontSize: 11, fontWeight: 800, color: accent, textTransform: 'uppercase', letterSpacing: 1, mb: 1.5 }}>
+        Claim Process Tracker — {progressed}/{TRACKER_STEPS.length} progressed
+      </Typography>
+      <Stack spacing={0.8}>
+        {TRACKER_STEPS.map((step, i) => {
+          const st = tracker[step.key] || {};
+          const opts = step.options || YESNO;
+          const showUp = allowsUpload(st.value);
+          const docs = st.docs || [];
+          return (
+            <Box key={step.key} sx={{ p: 1.1, borderRadius: '10px',
+                    border: '1px solid rgba(0,0,0,0.06)', bgcolor: showUp ? `${accent}0D` : 'transparent' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap' }}>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: '#374151', flex: 1, minWidth: 170 }}>
+                  {i + 1}. {step.label}
+                </Typography>
+                <FormControl size="small" sx={{ minWidth: 148 }}>
+                  <Select value={st.value || ''} displayEmpty onChange={e => setValue(step.key, e.target.value)}
+                    sx={{ fontSize: 12.5 }}>
+                    <MenuItem value=""><em>—</em></MenuItem>
+                    {opts.map(o => <MenuItem key={o} value={o} sx={{ fontSize: 12.5 }}>{o}</MenuItem>)}
+                  </Select>
+                </FormControl>
+                {showUp && (
+                  <Button component="label" size="small" variant="outlined" disabled={busy === step.key}
+                    startIcon={<UploadFileOutlinedIcon sx={{ fontSize: 15 }} />}
+                    sx={{ fontSize: 11, borderColor: `${accent}55`, color: accent, whiteSpace: 'nowrap' }}>
+                    {busy === step.key ? 'Uploading…' : 'Add files'}
+                    <input hidden type="file" multiple accept="image/*,application/pdf"
+                      onChange={e => { addFiles(step.key, e.target.files); e.target.value = ''; }} />
+                  </Button>
+                )}
+              </Box>
+              {docs.length > 0 && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8, mt: 1 }}>
+                  {docs.map((d, di) => (
+                    <Chip key={di} size="small" icon={<DescriptionOutlinedIcon sx={{ fontSize: 14 }} />}
+                      label={d.name || `File ${di + 1}`}
+                      onClick={() => openFile(d.url)} onDelete={() => removeDoc(step.key, di)}
+                      sx={{ fontSize: 11, maxWidth: 220, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }} />
+                  ))}
+                </Box>
+              )}
+            </Box>
+          );
+        })}
+      </Stack>
+    </Box>
+  );
+}
 
 const STATUS_CONFIG = {
   'Filed':        { color: '#6366f1', bg: 'rgba(99,102,241,0.10)' },
@@ -110,6 +231,8 @@ function ClaimCard({ claim, onUpdate }) {
                 {saving ? 'Saving…' : 'Save'}
               </Button>
             </Stack>
+
+            <ClaimProcessTracker claim={claim} brandPrefix="araksha" accent="#255EAB" />
           </Box>
         </Collapse>
       </CardContent>
