@@ -75,10 +75,12 @@ const dropdowns = {
   customer_type: ['Individual', 'Company'],
   insurance_provider: [
     'AIA Insurance', 'Allianz Insurance Lanka', 'Ceylinco General Insurance',
-    'Ceylinco Life Insurance', 'Fairfirst Insurance', 'HNB General Insurance',
+    'Ceylinco Life Insurance', 'Continental Insurance Lanka', 'Fairfirst Insurance',
+    'HNB General Insurance',
     'Janashakthi General Insurance', 'Janashakthi Life Insurance',
     'LOLC General Insurance', 'LOLC Life Assurance',
     'National Insurance Trust Fund', 'Orient Insurance',
+    'Peoples Insurance', 'Sanasa General Insurance',
     'Sanasa Life Assurance', 'Softlogic Life Insurance',
     'Sri Lanka Insurance Corporation',
     'Union Assurance', 'Other',
