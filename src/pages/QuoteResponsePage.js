@@ -305,7 +305,11 @@ const QuoteResponsePage = () => {
     (Number(form.road_safety_tax)  || 0) +
     (Number(form.stamp_fee)        || 0) +
     (Number(form.nbl)              || 0) +
-    (Number(form.ssc_levy)         || 0);
+    (Number(form.ssc_levy)         || 0) +
+    // custom amount fields defined on this product add into the total
+    (productDef?.customInsurerFields || [])
+      .filter(cf => cf.type !== 'text')
+      .reduce((s, cf) => s + (Number(form[cf.key]) || 0), 0);
 
   const validateInsurer = () => {
     const errs = {};
@@ -383,6 +387,12 @@ const QuoteResponsePage = () => {
         commission_type: form.commission_type,
         validity_days:   form.validity_days,
         notes:           form.notes,
+        // custom insurer fields configured on the product (label + value kept together)
+        ...((productDef?.customInsurerFields || []).length ? {
+          custom_fields: productDef.customInsurerFields
+            .filter(cf => form[cf.key] !== undefined && form[cf.key] !== '')
+            .map(cf => ({ key: cf.key, label: cf.label, type: cf.type || 'currency', value: form[cf.key] })),
+        } : {}),
         cover_responses:  coverResponses,
         clause_responses: clauseResponses,
         quote_file_url:  fileUrl,
@@ -573,6 +583,7 @@ const QuoteResponsePage = () => {
         commission_type: submittedData.commission_type || '',
         validity_days:   submittedData.validity_days?.toString()  || '',
         notes:           submittedData.notes          || '',
+        ...Object.fromEntries((submittedData.custom_fields || []).map(cf => [cf.key, (cf.value ?? '').toString()])),
       });
       setCoverResponses(submittedData.cover_responses  || {});
       setClauseResponses(submittedData.clause_responses || {});
@@ -587,6 +598,10 @@ const QuoteResponsePage = () => {
   const product      = productDef || null;
   const isPlansProduct = !!product?.hasPlans;
   const infoSections = buildInfoSections(product, quote?.form_data);
+  // Premium/quote input fields the admin turned off for this product — the
+  // insurer simply doesn't see them (default: every field shown).
+  const hiddenInsurerFields = new Set(product?.hiddenInsurerFields || []);
+  const showPrem = (k) => !hiddenInsurerFields.has(k);
   const parseDynamicExtras = (storeKey) => {
     try {
       return (JSON.parse(quote?.form_data?.[storeKey] || '[]'))
@@ -985,35 +1000,47 @@ const QuoteResponsePage = () => {
                     Premium Breakdown
                   </Typography>
                   <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                    <TextField label="Basic Premium (LKR) *" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
+                    {showPrem('basic_premium') && (
+                    <TextField label="Basic Premium (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       error={!!fieldErrors.basic_premium} helperText={fieldErrors.basic_premium}
-                      value={form.basic_premium} onChange={e => setFE('basic_premium', e.target.value)} />
+                      value={form.basic_premium} onChange={e => setFE('basic_premium', e.target.value)} />)}
+                    {showPrem('srcc_premium') && (
                     <TextField label="Strike Riot Civil Commotion — SRCC (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       error={!!fieldErrors.srcc_premium} helperText={fieldErrors.srcc_premium}
-                      value={form.srcc_premium} onChange={e => setFE('srcc_premium', e.target.value)} />
+                      value={form.srcc_premium} onChange={e => setFE('srcc_premium', e.target.value)} />)}
+                    {showPrem('tc_premium') && (
                     <TextField label="Terrorism Cover — TC (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       error={!!fieldErrors.tc_premium} helperText={fieldErrors.tc_premium}
-                      value={form.tc_premium} onChange={e => setFE('tc_premium', e.target.value)} />
+                      value={form.tc_premium} onChange={e => setFE('tc_premium', e.target.value)} />)}
+                    {showPrem('policy_fees') && (
                     <TextField label="Policy Fees (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
-                      value={form.policy_fees} onChange={e => setFE('policy_fees', e.target.value)} />
+                      value={form.policy_fees} onChange={e => setFE('policy_fees', e.target.value)} />)}
+                    {showPrem('cess') && (
                     <TextField label="Cess (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
-                      value={form.cess} onChange={e => setFE('cess', e.target.value)} />
+                      value={form.cess} onChange={e => setFE('cess', e.target.value)} />)}
+                    {showPrem('road_safety_tax') && (
                     <TextField label="Road Safety Tax (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
-                      value={form.road_safety_tax} onChange={e => setFE('road_safety_tax', e.target.value)} />
+                      value={form.road_safety_tax} onChange={e => setFE('road_safety_tax', e.target.value)} />)}
+                    {showPrem('stamp_fee') && (
                     <TextField label="Stamp Fee (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
-                      value={form.stamp_fee} onChange={e => setFE('stamp_fee', e.target.value)} />
+                      value={form.stamp_fee} onChange={e => setFE('stamp_fee', e.target.value)} />)}
+                    {showPrem('nbl') && (
                     <TextField label="NBL (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
-                      value={form.nbl} onChange={e => setFE('nbl', e.target.value)} />
+                      value={form.nbl} onChange={e => setFE('nbl', e.target.value)} />)}
+                    {showPrem('ssc_levy') && (
                     <TextField label="SSC Levy (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
-                      value={form.ssc_levy} onChange={e => setFE('ssc_levy', e.target.value)} />
+                      value={form.ssc_levy} onChange={e => setFE('ssc_levy', e.target.value)} />)}
+                    {showPrem('admin_fee') && (
                     <TextField label="Admin Fee (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       error={!!fieldErrors.admin_fee} helperText={fieldErrors.admin_fee}
-                      value={form.admin_fee} onChange={e => setFE('admin_fee', e.target.value)} />
+                      value={form.admin_fee} onChange={e => setFE('admin_fee', e.target.value)} />)}
+                    {showPrem('vat_amount') && (
                     <TextField label="VAT (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       error={!!fieldErrors.vat_amount} helperText={fieldErrors.vat_amount}
-                      value={form.vat_amount} onChange={e => setFE('vat_amount', e.target.value)} />
+                      value={form.vat_amount} onChange={e => setFE('vat_amount', e.target.value)} />)}
+                    {showPrem('other_premium') && (
                     <TextField label="Other (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
-                      value={form.other_premium} onChange={e => setFE('other_premium', e.target.value)} />
+                      value={form.other_premium} onChange={e => setFE('other_premium', e.target.value)} />)}
                   </Box>
                   <Box sx={{ mt: 1.5, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(37,94,171,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>Total Premium (LKR)</Typography>
@@ -1024,19 +1051,42 @@ const QuoteResponsePage = () => {
                 </Box>
               )}
 
+              {/* Custom insurer fields defined for this product */}
+              {(product?.customInsurerFields || []).length > 0 && (
+                <Box sx={{ p: 2, borderRadius: '12px', border: '1px solid rgba(99,102,241,0.2)', bgcolor: 'rgba(99,102,241,0.02)' }}>
+                  <Typography sx={{ fontSize: 12, fontWeight: 800, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: 0.8, mb: 1.5 }}>
+                    Additional Details
+                  </Typography>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+                    {product.customInsurerFields.map(cf => (
+                      cf.type === 'text' ? (
+                        <TextField key={cf.key} label={cf.label} size="small" fullWidth
+                          value={form[cf.key] || ''} onChange={e => setFE(cf.key, e.target.value)} />
+                      ) : (
+                        <TextField key={cf.key} label={`${cf.label} (LKR)`} type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
+                          value={form[cf.key] || ''} onChange={e => setFE(cf.key, e.target.value)} />
+                      )
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
               {/* Deductibles & Excesses */}
+              {(showPrem('deductible') || showPrem('excesses')) && (
               <Box sx={{ p: 2, borderRadius: '12px', border: `1px solid ${fieldErrors.deductible ? 'rgba(239,68,68,0.4)' : 'rgba(0,0,0,0.1)'}` }}>
                 <Typography sx={{ fontSize: 12, fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: 0.8, mb: 1.5 }}>
                   Deductibles & Excesses
                 </Typography>
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                  <TextField label="Deductibles *" size="small" fullWidth
+                  {showPrem('deductible') && (
+                  <TextField label="Deductibles" size="small" fullWidth
                     error={!!fieldErrors.deductible} helperText={fieldErrors.deductible}
-                    value={form.deductible} onChange={e => setFE('deductible', e.target.value)} />
+                    value={form.deductible} onChange={e => setFE('deductible', e.target.value)} />)}
+                  {showPrem('excesses') && (
                   <TextField label="Excesses" size="small" fullWidth
-                    value={form.excesses} onChange={e => setFE('excesses', e.target.value)} />
+                    value={form.excesses} onChange={e => setFE('excesses', e.target.value)} />)}
                 </Box>
-              </Box>
+              </Box>)}
 
               {/* Commission */}
               <Box>

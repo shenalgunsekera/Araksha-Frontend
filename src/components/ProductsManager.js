@@ -116,7 +116,29 @@ const EMPTY_PRODUCT = {
   customerNameField: 'proposer_name',
   comparisonRows: [...DEFAULT_COMPARISON_ROWS],
   fields: [],
+  hiddenInsurerFields: [],
+  customInsurerFields: [],
 };
+
+// The premium / quote fields the insurer fills in on their response form. Any
+// listed in a product's `hiddenInsurerFields` are removed from that product's
+// insurer form (e.g. a product with no SRCC or annual premium).
+const INSURER_PREMIUM_FIELDS = [
+  { key: 'basic_premium',   label: 'Basic Premium' },
+  { key: 'srcc_premium',    label: 'SRCC Premium' },
+  { key: 'tc_premium',      label: 'Terrorism Cover (TC)' },
+  { key: 'policy_fees',     label: 'Policy Fees' },
+  { key: 'cess',            label: 'Cess' },
+  { key: 'road_safety_tax', label: 'Road Safety Tax' },
+  { key: 'stamp_fee',       label: 'Stamp Fee' },
+  { key: 'nbl',             label: 'NBL' },
+  { key: 'ssc_levy',        label: 'SSC Levy' },
+  { key: 'admin_fee',       label: 'Admin Fee' },
+  { key: 'vat_amount',      label: 'VAT' },
+  { key: 'other_premium',   label: 'Other' },
+  { key: 'deductible',      label: 'Deductibles' },
+  { key: 'excesses',        label: 'Excesses' },
+];
 
 const EMPTY_FIELD = {
   name: '', label: '', section: '', type: 'text',
@@ -305,6 +327,8 @@ const ProductsManager = () => {
       customerNameField: p.customerNameField || 'proposer_name',
       comparisonRows: [...(p.comparisonRows || [])],
       fields: (p.fields || []).map(f => ({ ...f })),
+      hiddenInsurerFields: [...(p.hiddenInsurerFields || [])],
+      customInsurerFields: (p.customInsurerFields || []).map(f => ({ ...f })),
     });
     resetWizard();
     setEditOpen(true);
@@ -319,6 +343,8 @@ const ProductsManager = () => {
       customerNameField: p.customerNameField || 'proposer_name',
       comparisonRows: [...(p.comparisonRows || DEFAULT_COMPARISON_ROWS)],
       fields: (p.fields || []).map(f => ({ ...f })),
+      hiddenInsurerFields: [...(p.hiddenInsurerFields || [])],
+      customInsurerFields: (p.customInsurerFields || []).map(f => ({ ...f })),
     });
     resetWizard();
     setEditOpen(true);
@@ -340,6 +366,8 @@ const ProductsManager = () => {
         customerNameField: form.customerNameField.trim() || 'proposer_name',
         comparisonRows:    form.comparisonRows.filter(r => r.trim()),
         fields:            form.fields,
+        hiddenInsurerFields: form.hiddenInsurerFields || [],
+        customInsurerFields: (form.customInsurerFields || []).filter(f => f.label?.trim()),
         isCustom:          true,
         updated_at:        serverTimestamp(),
         ...(!editKey ? { created_at: serverTimestamp() } : {}),
@@ -441,6 +469,22 @@ const ProductsManager = () => {
   };
 
   const removeField = (idx) => setForm(f => ({ ...f, fields: f.fields.filter((_, i) => i !== idx) }));
+
+  // ── Insurer response form (premium fields the insurer fills in) ─────────────
+  const toggleInsurerStd = (key) => setForm(f => {
+    const hidden = new Set(f.hiddenInsurerFields || []);
+    if (hidden.has(key)) hidden.delete(key); else hidden.add(key);
+    return { ...f, hiddenInsurerFields: [...hidden] };
+  });
+  const addCustomInsurerField = () => setForm(f => ({
+    ...f, customInsurerFields: [...(f.customInsurerFields || []), { key: `custom_${Date.now().toString(36)}`, label: '', type: 'currency' }],
+  }));
+  const updateCustomInsurerField = (i, patch) => setForm(f => {
+    const arr = [...(f.customInsurerFields || [])]; arr[i] = { ...arr[i], ...patch }; return { ...f, customInsurerFields: arr };
+  });
+  const removeCustomInsurerField = (i) => setForm(f => ({
+    ...f, customInsurerFields: (f.customInsurerFields || []).filter((_, j) => j !== i),
+  }));
 
   // ── Shortcuts ──────────────────────────────────────────────────────────────
   const addStarterSection = (tpl) => {
@@ -783,6 +827,52 @@ const ProductsManager = () => {
                   <Typography sx={{ fontSize: 13 }}>No fields yet. Use a starter section above, or "Add Custom Field".</Typography>
                 </Box>
               )}
+
+              {/* ── Insurer response form ── */}
+              <Box sx={{ mt: 3, p: 2, borderRadius: '12px', border: '1px solid rgba(99,102,241,0.25)', bgcolor: 'rgba(99,102,241,0.03)' }}>
+                <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#4f46e5', mb: 0.4 }}>Insurer Response Form</Typography>
+                <Typography sx={{ fontSize: 12, color: '#6B7280', mb: 1.5 }}>
+                  Choose which premium/quote fields the insurance company fills in for this product, and add your own.
+                </Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr' }, gap: 0.2, mb: 1.5 }}>
+                  {INSURER_PREMIUM_FIELDS.map(pf => {
+                    const on = !(form.hiddenInsurerFields || []).includes(pf.key);
+                    return (
+                      <FormControlLabel key={pf.key} control={
+                        <Checkbox size="small" checked={on} onChange={() => toggleInsurerStd(pf.key)} />
+                      } label={<Typography sx={{ fontSize: 12.5 }}>{pf.label}</Typography>} />
+                    );
+                  })}
+                </Box>
+
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                  <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#4f46e5' }}>Custom insurer fields</Typography>
+                  <Button size="small" variant="outlined" startIcon={<AddIcon sx={{ fontSize: 15 }} />}
+                    onClick={addCustomInsurerField}
+                    sx={{ fontSize: 11.5, borderColor: 'rgba(99,102,241,0.4)', color: '#4f46e5' }}>
+                    Add field
+                  </Button>
+                </Stack>
+                <Stack spacing={1}>
+                  {(form.customInsurerFields || []).map((cf, i) => (
+                    <Stack key={cf.key || i} direction="row" spacing={1} alignItems="center">
+                      <TextField size="small" placeholder="Field label (e.g. Loading, Discount)" value={cf.label}
+                        onChange={e => updateCustomInsurerField(i, { label: e.target.value })}
+                        sx={{ flex: 1, '& input': { fontSize: 12.5 } }} />
+                      <FormControl size="small" sx={{ width: 150 }}>
+                        <Select value={cf.type || 'currency'} onChange={e => updateCustomInsurerField(i, { type: e.target.value })} sx={{ fontSize: 12.5 }}>
+                          <MenuItem value="currency" sx={{ fontSize: 12.5 }}>Amount (LKR)</MenuItem>
+                          <MenuItem value="text" sx={{ fontSize: 12.5 }}>Text / note</MenuItem>
+                        </Select>
+                      </FormControl>
+                      <Button size="small" color="error" onClick={() => removeCustomInsurerField(i)} sx={{ fontSize: 11, minWidth: 0 }}>Remove</Button>
+                    </Stack>
+                  ))}
+                  {(form.customInsurerFields || []).length === 0 && (
+                    <Typography sx={{ fontSize: 11.5, color: '#9CA3AF' }}>No custom insurer fields. Amount fields are added into the insurer's total premium.</Typography>
+                  )}
+                </Stack>
+              </Box>
             </Box>
           )}
 
