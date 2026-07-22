@@ -44,6 +44,7 @@ function buildInfoSections(product, formData) {
   const sectionOrder = [];
   (product.fields || []).forEach(f => {
     if (!f.section || INSURER_SECTIONS.has(f.section)) return;
+    if (f.hideFromInsurer) return; // admin chose not to show this field to the insurer
     if (f.showIf) {
       if (f.showIf.notZero) {
         const pv = formData[f.showIf.field];

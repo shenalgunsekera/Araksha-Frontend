@@ -121,7 +121,7 @@ const EMPTY_PRODUCT = {
 const EMPTY_FIELD = {
   name: '', label: '', section: '', type: 'text',
   required: false, options: '', accept: '',
-  showIfField: '', showIfValue: '',
+  showIfField: '', showIfValue: '', hideFromInsurer: false,
 };
 
 function slugify(str) {
@@ -398,6 +398,7 @@ const ProductsManager = () => {
       type: f.type || 'text', required: !!f.required,
       options: (f.options || []).join(', '), accept: f.accept || '',
       showIfField: f.showIf?.field || '', showIfValue: f.showIf?.value || '',
+      hideFromInsurer: !!f.hideFromInsurer,
     });
     setFieldDlg(true);
   };
@@ -410,6 +411,7 @@ const ProductsManager = () => {
       section: fieldForm.section.trim() || 'General',
       type: fieldForm.type,
       ...(fieldForm.required ? { required: true } : {}),
+      ...(fieldForm.hideFromInsurer ? { hideFromInsurer: true } : {}),
       ...(['select', 'multiselect'].includes(fieldForm.type) && fieldForm.options
         ? { options: fieldForm.options.split(',').map(o => o.trim()).filter(Boolean) } : {}),
       ...(fieldForm.type === 'file' && fieldForm.accept ? { accept: fieldForm.accept.trim() } : {}),
@@ -1001,6 +1003,10 @@ const ProductsManager = () => {
               <Switch checked={fieldForm.required}
                 onChange={e => setFieldForm(f => ({ ...f, required: e.target.checked }))} size="small" />
             } label={<Typography sx={{ fontSize: 13 }}>Required field</Typography>} />
+            <FormControlLabel control={
+              <Switch checked={fieldForm.hideFromInsurer}
+                onChange={e => setFieldForm(f => ({ ...f, hideFromInsurer: e.target.checked }))} size="small" />
+            } label={<Typography sx={{ fontSize: 13 }}>Hide from insurer — don't show this field on the insurance company's quote form</Typography>} />
             {['select', 'multiselect'].includes(fieldForm.type) && (
               <TextField fullWidth label="Options (comma-separated)" size="small" value={fieldForm.options}
                 onChange={e => setFieldForm(f => ({ ...f, options: e.target.value }))}

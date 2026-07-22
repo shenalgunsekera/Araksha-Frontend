@@ -2319,6 +2319,7 @@ const QuotationsPage = () => {
               if (k === 'araksha_ib_file_no') return false;
               const fd = productFields.find(f => f.name === k);
               if (!fd) return false;
+              if (fd.hideFromInsurer) return false; // admin hid this from the insurer
               if (fd.section === 'Introducer') return false;
               if (fd.section === 'Document Uploads') return false;
               if (fd.type === 'file') return false;
