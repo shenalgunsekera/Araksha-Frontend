@@ -213,14 +213,20 @@ const QuoteResponsePage = () => {
             setPlanPremiums(Array.from({ length: Math.max(pc, 1) }, (_, i) => ({
               plan: i + 1, basic: '', tax_pct: '18', tax: 0, total: 0,
             })));
-            // Resolve product definition (static or custom)
+            // Resolve product definition. Prefer the LIVE product from Firestore
+            // (admin-panel edits are saved there) so any changes to sections/fields
+            // reach the insurer's form; fall back to the built-in static config for
+            // products that were never customised.
             const pKey = data.product_key;
-            if (PRODUCTS[pKey]) {
-              setProductDef(PRODUCTS[pKey]);
-            } else if (pKey) {
+            if (pKey) {
               getDoc(doc(db, 'products', pKey))
-                .then(ps => { if (ps.exists()) setProductDef(ps.data()); })
-                .catch(() => {});
+                .then(ps => {
+                  if (ps.exists()) setProductDef(ps.data());
+                  else if (PRODUCTS[pKey]) setProductDef(PRODUCTS[pKey]);
+                })
+                .catch(() => { if (PRODUCTS[pKey]) setProductDef(PRODUCTS[pKey]); });
+            } else if (PRODUCTS[pKey]) {
+              setProductDef(PRODUCTS[pKey]);
             }
           })
           .catch(() => setError('Failed to load quote. Please check your link.'))

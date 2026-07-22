@@ -422,7 +422,17 @@ const ProductsManager = () => {
         // preserve any auto-calc already configured for this field
         if (f.fields[editFldIdx]?.autoCalc && NUMERIC_TYPES.includes(newField.type)) newField.autoCalc = f.fields[editFldIdx].autoCalc;
         fields[editFldIdx] = newField;
-      } else fields.push(newField);
+      } else {
+        // Insert at the END of its section so it lands in the right group — the
+        // form renderers group consecutive same-section fields, so appending to
+        // the very bottom would spawn a duplicate section instead. New sections
+        // (no existing match) still append at the end.
+        const sec = newField.section;
+        let insertAt = -1;
+        fields.forEach((ff, i) => { if ((ff.section || 'General') === sec) insertAt = i; });
+        if (insertAt >= 0) fields.splice(insertAt + 1, 0, newField);
+        else fields.push(newField);
+      }
       return { ...f, fields };
     });
     setFieldDlg(false);

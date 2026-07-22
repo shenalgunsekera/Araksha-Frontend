@@ -187,18 +187,16 @@ function ProductForm({ product, values, onChange, errors = {}, allProducts = STA
     });
   };
 
-  // Group fields by section
+  // Group fields by section, keyed by section name so all fields of a section
+  // stay together even if they aren't contiguous in the array (e.g. a field
+  // added later). Section order follows where each section first appears.
   const sections = [];
-  let currentSection = { name: null, fields: [] };
+  const secIndex = {};
   def.fields.forEach(f => {
-    if (f.section !== currentSection.name) {
-      if (currentSection.fields.length) sections.push({ ...currentSection });
-      currentSection = { name: f.section, fields: [f] };
-    } else {
-      currentSection.fields.push(f);
-    }
+    const name = f.section;
+    if (secIndex[name] === undefined) { secIndex[name] = sections.length; sections.push({ name, fields: [] }); }
+    sections[secIndex[name]].fields.push(f);
   });
-  if (currentSection.fields.length) sections.push(currentSection);
 
   const isVisible = (f) => {
     if (!f.showIf) return true;
