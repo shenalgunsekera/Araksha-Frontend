@@ -1041,24 +1041,7 @@ const QuoteResponsePage = () => {
                     {showPrem('other_premium') && (
                     <TextField label="Other (LKR)" type="number" size="small" fullWidth inputProps={{ step: 'any', inputMode: 'decimal' }}
                       value={form.other_premium} onChange={e => setFE('other_premium', e.target.value)} />)}
-                  </Box>
-                  <Box sx={{ mt: 1.5, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(37,94,171,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>Total Premium (LKR)</Typography>
-                    <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#255EAB' }}>
-                      {totalPremium > 0 ? totalPremium.toLocaleString() : '—'}
-                    </Typography>
-                  </Box>
-                </Box>
-              )}
-
-              {/* Custom insurer fields defined for this product */}
-              {(product?.customInsurerFields || []).length > 0 && (
-                <Box sx={{ p: 2, borderRadius: '12px', border: '1px solid rgba(99,102,241,0.2)', bgcolor: 'rgba(99,102,241,0.02)' }}>
-                  <Typography sx={{ fontSize: 12, fontWeight: 800, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: 0.8, mb: 1.5 }}>
-                    Additional Details
-                  </Typography>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                    {product.customInsurerFields.map(cf => (
+                    {(product?.customInsurerFields || []).map(cf => (
                       cf.type === 'text' ? (
                         <TextField key={cf.key} label={cf.label} size="small" fullWidth
                           value={form[cf.key] || ''} onChange={e => setFE(cf.key, e.target.value)} />
@@ -1067,6 +1050,12 @@ const QuoteResponsePage = () => {
                           value={form[cf.key] || ''} onChange={e => setFE(cf.key, e.target.value)} />
                       )
                     ))}
+                  </Box>
+                  <Box sx={{ mt: 1.5, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(37,94,171,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>Total Premium (LKR)</Typography>
+                    <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#255EAB' }}>
+                      {totalPremium > 0 ? totalPremium.toLocaleString() : '—'}
+                    </Typography>
                   </Box>
                 </Box>
               )}
