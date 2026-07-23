@@ -1013,6 +1013,21 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
   const isPlansProduct = !!product?.hasPlans;
   const planCount = isPlansProduct ? Math.max(parseInt(quote?.form_data?.no_of_plans) || 1, 1) : 0;
 
+  // Insurer premium fields to compare, tailored to this product: standard fields
+  // the admin kept (not in hiddenInsurerFields) plus any custom fields they added.
+  const hiddenPrem = new Set(product?.hiddenInsurerFields || []);
+  const customPrem = product?.customInsurerFields || [];
+  const STD_PREM_ROWS = [
+    { key: 'basic_premium', label: 'Basic Premium (LKR)' },
+    { key: 'srcc_premium',  label: 'SRCC (LKR)' },
+    { key: 'tc_premium',    label: 'TC (LKR)' },
+    { key: 'admin_fee',     label: 'Admin Fee (LKR)' },
+    { key: 'vat_amount',    label: 'VAT (LKR)' },
+    { key: 'other_premium', label: 'Other (LKR)' },
+  ];
+  const premRows = STD_PREM_ROWS.filter(r => !hiddenPrem.has(r.key));
+  const respCustom = (r, key) => { const cf = (r.custom_fields || []).find(c => c.key === key); return cf ? cf.value : ''; };
+
   // ── Broker response-edit state ──────────────────────────────────────────────
   const [editTarget,       setEditTarget]       = useState(null);
   const [editForm,         setEditForm]         = useState({});
@@ -1037,6 +1052,7 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
       commission_type: r.commission_type || '',
       validity_days:   r.validity_days?.toString()  || '',
       notes:           r.notes          || '',
+      ...Object.fromEntries((r.custom_fields || []).map(cf => [cf.key, (cf.value ?? '').toString()])),
     });
     setEditCoverResp(r.cover_responses   ? JSON.parse(JSON.stringify(r.cover_responses))  : {});
     setEditClauseResp(r.clause_responses ? JSON.parse(JSON.stringify(r.clause_responses)) : {});
@@ -1064,11 +1080,16 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
                 const af = Number(editForm.admin_fee)     || 0;
                 const vt = Number(editForm.vat_amount)    || 0;
                 const op = Number(editForm.other_premium) || 0;
-                return { basic_premium: bp, srcc_premium: sp, tc_premium: tc, admin_fee: af, vat_amount: vt, other_premium: op, premium: bp + sp + tc + af + vt + op };
+                const customSum = customPrem.filter(cf => cf.type !== 'text').reduce((s, cf) => s + (Number(editForm[cf.key]) || 0), 0);
+                return { basic_premium: bp, srcc_premium: sp, tc_premium: tc, admin_fee: af, vat_amount: vt, other_premium: op, premium: bp + sp + tc + af + vt + op + customSum };
               })();
+          const custom_fields = customPrem
+            .filter(cf => editForm[cf.key] !== undefined && editForm[cf.key] !== '')
+            .map(cf => ({ key: cf.key, label: cf.label, type: cf.type || 'currency', value: editForm[cf.key] }));
           return {
             ...r,
             ...premiumFields,
+            ...(custom_fields.length ? { custom_fields } : {}),
             deductible:       editForm.deductible,
             excesses:         editForm.excesses,
             commission_type:  editForm.commission_type,
@@ -1635,14 +1656,7 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
                 </>
               ) : (
                 <>
-                  {[
-                    { key: 'basic_premium', label: 'Basic Premium (LKR)' },
-                    { key: 'srcc_premium',  label: 'SRCC (LKR)' },
-                    { key: 'tc_premium',    label: 'TC (LKR)' },
-                    { key: 'admin_fee',     label: 'Admin Fee (LKR)' },
-                    { key: 'vat_amount',    label: 'VAT (LKR)' },
-                    { key: 'other_premium', label: 'Other (LKR)' },
-                  ].map((row, i) => (
+                  {premRows.map((row, i) => (
                     <TableRow key={row.key} sx={{ bgcolor: i % 2 === 0 ? 'rgba(242,247,252,0.4)' : '#fff' }}>
                       <TableCell sx={{ fontWeight: 600, color: '#374151', fontSize: 12.5 }}>{row.label}</TableCell>
                       {responses.map(r => (
@@ -1650,6 +1664,19 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
                           {r[row.key] ? Number(r[row.key]).toLocaleString() : '—'}
                         </TableCell>
                       ))}
+                    </TableRow>
+                  ))}
+                  {customPrem.map((cf, i) => (
+                    <TableRow key={cf.key} sx={{ bgcolor: (premRows.length + i) % 2 === 0 ? 'rgba(242,247,252,0.4)' : '#fff' }}>
+                      <TableCell sx={{ fontWeight: 600, color: '#374151', fontSize: 12.5 }}>{cf.label}{cf.type !== 'text' ? ' (LKR)' : ''}</TableCell>
+                      {responses.map(r => {
+                        const v = respCustom(r, cf.key);
+                        return (
+                          <TableCell key={r.id} align="center" sx={{ fontSize: 12.5 }}>
+                            {v === '' || v == null ? '—' : (cf.type === 'text' ? v : Number(v).toLocaleString())}
+                          </TableCell>
+                        );
+                      })}
                     </TableRow>
                   ))}
                   <TableRow sx={{ bgcolor: 'rgba(37,94,171,0.06)' }}>
@@ -1682,7 +1709,7 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
                 { key: 'deductible',   label: 'Deductibles' },
                 { key: 'excesses',     label: 'Excesses' },
                 { key: 'validity_days', label: 'Validity (days)' },
-              ].map((row, i) => (
+              ].filter(row => row.key === 'validity_days' || !hiddenPrem.has(row.key)).map((row, i) => (
                 <TableRow key={row.key} sx={{ bgcolor: i % 2 === 0 ? 'rgba(107,114,128,0.04)' : '#fff' }}>
                   <TableCell sx={{ fontWeight: 600, color: '#374151', fontSize: 12.5 }}>{row.label}</TableCell>
                   {responses.map(r => (
@@ -1896,17 +1923,16 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
             Premium Breakdown
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 2.5 }}>
-            {[
-              { key: 'basic_premium', label: 'Basic Premium (LKR)' },
-              { key: 'srcc_premium',  label: 'SRCC (LKR)'          },
-              { key: 'tc_premium',    label: 'TC (LKR)'             },
-              { key: 'admin_fee',     label: 'Admin Fee (LKR)'      },
-              { key: 'vat_amount',    label: 'VAT (LKR)'            },
-              { key: 'other_premium', label: 'Other (LKR)'          },
-            ].map(({ key, label }) => (
+            {premRows.map(({ key, label }) => (
               <TextField key={key} size="small" fullWidth label={label} type="number"
                 value={editForm[key] || ''}
                 onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))} />
+            ))}
+            {customPrem.map(cf => (
+              <TextField key={cf.key} size="small" fullWidth label={`${cf.label}${cf.type !== 'text' ? ' (LKR)' : ''}`}
+                type={cf.type === 'text' ? 'text' : 'number'}
+                value={editForm[cf.key] || ''}
+                onChange={e => setEditForm(f => ({ ...f, [cf.key]: e.target.value }))} />
             ))}
           </Box>
 
