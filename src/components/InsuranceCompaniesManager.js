@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { confirmTypedDelete } from '../utils/confirmDelete';
 import { CATEGORY_COLORS } from '../config/insuranceCompanies';
@@ -27,6 +27,84 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 
+// Normalise a "Product" column into a category (Life for LFE/LIFE, Title Case otherwise).
+const normCategory = (p) => {
+  const u = (p || '').toUpperCase().trim();
+  if (u === 'LFE' || u === 'LIFE') return 'Life';
+  if (!u) return '';
+  return u.charAt(0) + u.slice(1).toLowerCase();
+};
+
+// Parse pasted rows (tab- or comma-separated) into {name, email, category}.
+// The field containing "@" is the email; the remaining two are Company then Product.
+const parseBulkInsurers = (text) => {
+  const rows = [];
+  (text || '').split(/\r?\n/).forEach((line) => {
+    const l = line.trim();
+    if (!l) return;
+    const parts = l.split(/\t|,/).map((s) => s.trim()).filter((s) => s !== '');
+    if (parts.length < 2) return;
+    const email = parts.find((p) => p.includes('@'));
+    if (!email) return; // header row or junk — no email present
+    const rest = parts.filter((p) => p !== email);
+    rows.push({ name: rest[0] || '', email, category: normCategory(rest[1] || '') });
+  });
+  return rows;
+};
+
+// Araksha's provided insurer contact list (Email, Company, Product). Pre-filled
+// in Bulk Import so it can be reviewed and added in one go; edit freely first.
+const PROVIDED_INSURERS = `rajindra.perera@takaful.lk, AMANA, LFE
+lilani.hareesh@takaful.lk, AMANA, LIFE
+nuwanthit@slicgeneral.com, SLIC, GENERAL
+nilankawa@slicgeneral.com, SLIC, GENERAL
+rasikam@slicgeneral.com, SLIC, GENERAL
+pathumt@srilankainsurance.com, SLIC, GENERAL
+milroyf@allianz.lk, ALLIANZ, GENERAL
+menakag@allianz.lk, ALLIANZ, GENERAL
+charithm@cilanka.com, CONTI, GENERAL
+solomanf@cilanka.com, CONTI, GENERAL
+motor.broker@cilanka.com, CONTI, MOTOR
+nmmiscellaneous@cilanka.com, CONTI, GENERAL
+yasirukas@cilanka.com, CONTI, MONEY
+udarar@cilankalife.com, CONTI, LFE
+saliyad@cilankalife.com, CONTI, LFE
+UpekshaVi@lolcgeneral.com, LOLC, GENERAL
+Broker_UW@lolcgeneral.com, LOLC, GENERAL
+SachiniRat@lolcgeneral.com, LOLC, GENERAL
+hasna.rodrigo@softlogiclife.lk, SOFTLOGIC, LFE
+amandananayakkara@pnu.lk, SOFTLOGIC, LFE
+Ruvin.Gamage@softlogiclife.lk, SOFTLOGIC, LFE
+kushanimunasinghe@pnu.lk, SOFTLOGIC, LFE
+Himal.Gunawardana@aia.com, AIA, LFE
+Suren.Mallikahewa@aia.com, AIA, LFE
+Ruvini.Kaushalya@aia.com, AIA, LFE
+Ishanse@janashakthi.com, JIC, MEDICAL
+gayathrik@janashakthi.com, JIC, MEDICAL
+lalithk@fairfirst.lk, FAIRFIRST, GENERAL
+lnushkaf@fairfirst.lk, FAIRFIRST, TRAVEL
+amayap@fairfirst.lk, FAIRFIRST, TRAVEL
+nadeejag@fairfirst.lk, FAIRFIRST, TRAVEL
+thilinas@fairfirst.lk, FAIRFIRST, MOTOR
+motorfleetunderwriting@FAIRFIRST.lk, FAIRFIRST, MOTOR
+motorbrokeruwteam@FAIRFIRST.lk, FAIRFIRST, MOTOR
+marineunderwriting@fairfirst.lk, FAIRFIRST, MARINE
+nethmin@fairfirst.lk, FAIRFIRST, MARINE
+brian@fairfirst.lk, FAIRFIRST, MARINE
+propertyunderwriting@fairfirst.lk, FAIRFIRST, PROPERTY
+thusharam@fairfirst.lk, FAIRFIRST, PROPERTY
+rangah@fairfirst.lk, FAIRFIRST, PROPERTY
+madharan@fairfirst.lk, FAIRFIRST, PROPERTY
+nadunip@fairfirst.lk, FAIRFIRST, MEDICAL
+sandanin@fairfirst.lk, FAIRFIRST, MEDICAL
+fahrar@fairfirst.lk, FAIRFIRST, MEDICAL
+piyuman@fairfirst.lk, FAIRFIRST, MEDICAL
+isurud@fairfirst.lk, FAIRFIRST, MEDICAL
+arangalacity@ceyins.lk, CEYLINCO, MOTOR
+ciccofr2@ceyins.lk, CEYLINCO, FIRE
+ciccomr@ceyins.lk, CEYLINCO, MARINE
+Quotations-ciccoms@ceyins.lk, CEYLINCO, MISCELLENEOUS`;
+
 const InsuranceCompaniesManager = () => {
   const [companies,   setCompanies]   = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -37,6 +115,9 @@ const InsuranceCompaniesManager = () => {
   const [filterCat,   setFilterCat]   = useState('all');
   const [search,      setSearch]      = useState('');
   const [toast,       setToast]       = useState({ open:false, msg:'', severity:'success' });
+  const [bulkOpen,    setBulkOpen]    = useState(false);
+  const [bulkText,    setBulkText]    = useState('');
+  const [bulkBusy,    setBulkBusy]    = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,6 +150,27 @@ const InsuranceCompaniesManager = () => {
     setSaving(false);
   };
 
+  const handleBulkImport = async () => {
+    const rows = parseBulkInsurers(bulkText).filter(r => r.email && r.name);
+    if (!rows.length) { setToast({ open:true, msg:'No valid rows found — need Company + Email on each line.', severity:'error' }); return; }
+    const existing = new Set(companies.map(c => (c.email || '').toLowerCase()));
+    const toAdd = rows.filter(r => !existing.has(r.email.toLowerCase()));
+    const skipped = rows.length - toAdd.length;
+    if (!toAdd.length) { setToast({ open:true, msg:`All ${rows.length} already exist — nothing to add.`, severity:'info' }); return; }
+    setBulkBusy(true);
+    try {
+      let batch = writeBatch(db), n = 0;
+      for (const r of toAdd) {
+        batch.set(doc(collection(db, 'insurance_companies')), { name:r.name, email:r.email, category:r.category, created_at:serverTimestamp() });
+        if (++n % 400 === 0) { await batch.commit(); batch = writeBatch(db); }
+      }
+      await batch.commit();
+      setToast({ open:true, msg:`Added ${toAdd.length} insurer${toAdd.length>1?'s':''}${skipped?`, skipped ${skipped} already on file`:''}.`, severity:'success' });
+      setBulkOpen(false); setBulkText(''); load();
+    } catch (err) { setToast({ open:true, msg:err.message, severity:'error' }); }
+    setBulkBusy(false);
+  };
+
   const handleDelete = async (id, name) => {
     if (!confirmTypedDelete(`Remove insurer contact ${name}?`)) return;
     await deleteDoc(doc(db,'insurance_companies',id));
@@ -98,6 +200,11 @@ const InsuranceCompaniesManager = () => {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
+          <Button variant="outlined" size="small"
+            onClick={() => { setBulkText(PROVIDED_INSURERS); setBulkOpen(true); }}
+            sx={{ borderColor:'rgba(37,94,171,0.4)', color:'#255EAB' }}>
+            Bulk Import
+          </Button>
           <Button variant="contained" size="small" startIcon={<AddIcon />}
             onClick={() => { setForm({ name:'', email:'', category:'' }); setAddOpen(true); }}>
             Add Company
@@ -187,6 +294,34 @@ const InsuranceCompaniesManager = () => {
           })}
         </Stack>
       )}
+
+      {/* Bulk import dialog */}
+      <Dialog open={bulkOpen} onClose={()=>!bulkBusy && setBulkOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Bulk Import Insurers</DialogTitle>
+        <DialogContent sx={{ pt:2.5 }}>
+          <Typography sx={{ fontSize:12.5, color:'#6B7280', mb:1.5 }}>
+            One insurer per line as <strong>Email, Company, Product</strong> (comma or tab separated).
+            You can paste the three columns straight from Excel. The Product becomes the category
+            (LFE/LIFE → Life). Duplicates (by email) are skipped.
+          </Typography>
+          {(() => { const preview = parseBulkInsurers(bulkText).filter(r => r.email && r.name);
+            const dupes = new Set(companies.map(c => (c.email||'').toLowerCase()));
+            const fresh = preview.filter(r => !dupes.has(r.email.toLowerCase())).length;
+            return (
+              <Alert severity={fresh ? 'info' : 'warning'} sx={{ mb:1.5, fontSize:12 }}>
+                {preview.length} row{preview.length!==1?'s':''} detected · {fresh} new to add · {preview.length-fresh} already on file
+              </Alert>
+            ); })()}
+          <TextField multiline minRows={10} fullWidth value={bulkText}
+            onChange={e=>setBulkText(e.target.value)}
+            placeholder={'name@insurer.lk, Company, Motor'}
+            sx={{ '& textarea': { fontFamily:'monospace', fontSize:12 } }} />
+        </DialogContent>
+        <DialogActions sx={{ px:3, py:2, borderTop:'1px solid rgba(56,163,224,0.10)' }}>
+          <Button onClick={()=>setBulkOpen(false)} disabled={bulkBusy} variant="outlined" sx={{ borderColor:'#e0e0e0', color:'#6B7280' }}>Cancel</Button>
+          <Button variant="contained" onClick={handleBulkImport} disabled={bulkBusy}>{bulkBusy ? 'Importing…' : 'Import Insurers'}</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Add company dialog */}
       <Dialog open={addOpen} onClose={()=>setAddOpen(false)} maxWidth="sm" fullWidth>
