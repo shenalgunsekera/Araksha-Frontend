@@ -1051,12 +1051,13 @@ const QuoteResponsePage = () => {
                       )
                     ))}
                   </Box>
+                  {!product?.hideInsurerTotal && (
                   <Box sx={{ mt: 1.5, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(37,94,171,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>Total Premium (LKR)</Typography>
                     <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#255EAB' }}>
                       {totalPremium > 0 ? totalPremium.toLocaleString() : '—'}
                     </Typography>
-                  </Box>
+                  </Box>)}
                 </Box>
               )}
 

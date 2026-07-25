@@ -118,6 +118,7 @@ const EMPTY_PRODUCT = {
   fields: [],
   hiddenInsurerFields: [],
   customInsurerFields: [],
+  hideInsurerTotal: false,
 };
 
 // The premium / quote fields the insurer fills in on their response form. Any
@@ -329,6 +330,7 @@ const ProductsManager = () => {
       fields: (p.fields || []).map(f => ({ ...f })),
       hiddenInsurerFields: [...(p.hiddenInsurerFields || [])],
       customInsurerFields: (p.customInsurerFields || []).map(f => ({ ...f })),
+      hideInsurerTotal: !!p.hideInsurerTotal,
     });
     resetWizard();
     setEditOpen(true);
@@ -345,6 +347,7 @@ const ProductsManager = () => {
       fields: (p.fields || []).map(f => ({ ...f })),
       hiddenInsurerFields: [...(p.hiddenInsurerFields || [])],
       customInsurerFields: (p.customInsurerFields || []).map(f => ({ ...f })),
+      hideInsurerTotal: !!p.hideInsurerTotal,
     });
     resetWizard();
     setEditOpen(true);
@@ -368,6 +371,7 @@ const ProductsManager = () => {
         fields:            form.fields,
         hiddenInsurerFields: form.hiddenInsurerFields || [],
         customInsurerFields: (form.customInsurerFields || []).filter(f => f.label?.trim()),
+        hideInsurerTotal:  !!form.hideInsurerTotal,
         isCustom:          true,
         updated_at:        serverTimestamp(),
         ...(!editKey ? { created_at: serverTimestamp() } : {}),
@@ -834,6 +838,10 @@ const ProductsManager = () => {
                 <Typography sx={{ fontSize: 12, color: '#6B7280', mb: 1.5 }}>
                   Choose which premium/quote fields the insurance company fills in for this product, and add your own.
                 </Typography>
+                <FormControlLabel sx={{ mb: 1 }} control={
+                  <Switch size="small" checked={!form.hideInsurerTotal}
+                    onChange={e => setForm(f => ({ ...f, hideInsurerTotal: !e.target.checked }))} />
+                } label={<Typography sx={{ fontSize: 12.5 }}>Show the <strong>Total Premium</strong> on the insurer's form</Typography>} />
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr' }, gap: 0.2, mb: 1.5 }}>
                   {INSURER_PREMIUM_FIELDS.map(pf => {
                     const on = !(form.hiddenInsurerFields || []).includes(pf.key);
