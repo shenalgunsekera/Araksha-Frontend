@@ -2067,7 +2067,7 @@ const QuotationsPage = () => {
     broker_phone: userProfile?.phone || '',
   }), [userProfile, user]);
   const productList = useMemo(
-    () => Object.entries(allP).map(([key, val]) => ({ key, ...val })),
+    () => Object.entries(allP).filter(([, val]) => !val.hidden).map(([key, val]) => ({ key, ...val })),
     [allP],
   );
   const [tab,           setTab]           = useState(0);

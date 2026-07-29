@@ -1126,6 +1126,7 @@ export const PRODUCTS = {
 
   life_endowment: {
     label: 'Life Endowment',
+    hidden: true, // hidden from all product selectors/listings (Araksha)
     prefix: 'LE',
     customerNameField: 'proposer_name',
     icon: '💚',

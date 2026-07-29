@@ -71,7 +71,7 @@ const dropdowns = {
   sum_insured_currency: ['LKR', 'USD', 'EUR', 'GBP', 'AUD', 'JPY', 'INR', 'SGD', 'Other'],
   main_class: MAIN_CLASSES,
   // Auto-generated from PRODUCTS config — if a product is added there, it appears here
-  product: Object.values(PRODUCTS).map(p => p.label),
+  product: Object.values(PRODUCTS).filter(p => !p.hidden).map(p => p.label),
   customer_type: ['Individual', 'Company'],
   insurance_provider: [
     'AIA Insurance', 'Allianz Insurance Lanka', 'Ceylinco General Insurance',

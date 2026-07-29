@@ -305,7 +305,7 @@ const ProductsManager = () => {
     return unsub;
   }, []);
 
-  const builtIn = Object.entries(PRODUCTS).map(([key, val]) => ({ key, ...val, isBuiltIn: true }));
+  const builtIn = Object.entries(PRODUCTS).filter(([, val]) => !val.hidden).map(([key, val]) => ({ key, ...val, isBuiltIn: true }));
   const custom  = customList.map(p => ({ ...p, isBuiltIn: false }));
   const all     = [...builtIn, ...custom];
 
