@@ -12,6 +12,8 @@
 //      clickable link, with a graceful link fallback when an image can't be
 //      embedded (CORS / fetch failure) — so clicking a quote always works.
 
+import { isInsurerFieldHidden, customInsurerRows, responseCustomValue, showInsurerTotal, formatCustomValue } from './insurerFields';
+
 const NAVY = [10, 26, 62];
 const RED = [37, 94, 171];
 const ORANGE = [56, 163, 224];
@@ -129,11 +131,11 @@ export async function generateComparisonPdf({ quote, product, responses, audienc
               ['Plan Total (LKR)', r => `LKR ${Number(r.plan_premiums?.[pi]?.total || 0).toLocaleString()}`],
             ].forEach(([label, getter], i) => rows.push(mkRow(label, resps.map(getter), label.startsWith('Plan Total'), false, i)));
           }
-          rows.push(mkRow('GRAND TOTAL (LKR)', resps.map(r => `LKR ${Number(r.premium || 0).toLocaleString()}`), true));
+          if (showInsurerTotal(product)) rows.push(mkRow('GRAND TOTAL (LKR)', resps.map(r => `LKR ${Number(r.premium || 0).toLocaleString()}`), true));
           return rows;
         })()
-      : [
-          ...[
+      : (() => {
+          const rows = [
             ['basic_premium', 'Basic Premium (LKR)'],
             ['srcc_premium', 'SRCC (LKR)'],
             ['tc_premium', 'TC (LKR)'],
@@ -146,9 +148,16 @@ export async function generateComparisonPdf({ quote, product, responses, audienc
             ['admin_fee', 'Admin Fee (LKR)'],
             ['vat_amount', 'VAT (LKR)'],
             ['other_premium', 'Other (LKR)'],
-          ].map(([k, label], i) => mkRow(label, resps.map(r => r[k] ? `LKR ${Number(r[k]).toLocaleString()}` : '—'), false, false, i)),
-          mkRow('TOTAL PREMIUM (LKR)', resps.map(r => `LKR ${Number(r.premium || 0).toLocaleString()}`), true),
-        ];
+          ]
+            .filter(([k]) => !isInsurerFieldHidden(product, k))
+            .map(([k, label], i) => mkRow(label, resps.map(r => r[k] ? `LKR ${Number(r[k]).toLocaleString()}` : '—'), false, false, i));
+          customInsurerRows(product).forEach((cf, i) => rows.push(mkRow(
+            `${cf.label}${cf.type !== 'text' ? ' (LKR)' : ''}`,
+            resps.map(r => { const v = responseCustomValue(r, cf.key); return formatCustomValue(v, cf.type) === '—' ? '—' : (cf.type === 'text' ? String(v) : `LKR ${Number(v).toLocaleString()}`); }),
+            false, false, rows.length + i)));
+          if (showInsurerTotal(product)) rows.push(mkRow('TOTAL PREMIUM (LKR)', resps.map(r => `LKR ${Number(r.premium || 0).toLocaleString()}`), true));
+          return rows;
+        })();
 
     return [
       mkSectionRow('PREMIUM BREAKDOWN'),

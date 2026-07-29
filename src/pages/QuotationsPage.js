@@ -1168,20 +1168,25 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
               `<tr style="background:${i%2===0?'#F0F9FF':'#fff'}"><td style="padding:8px 14px 8px 22px;font-weight:600;color:#374151;">${label}</td>${responses.map(r => `<td style="padding:8px 14px;text-align:right;">${getter(r)}</td>`).join('')}</tr>`
             )),
           ].join('')).join('') +
-          `<tr style="background:#E0F2FE"><td style="padding:8px 14px;font-weight:800;color:#0891b2;">Grand Total (LKR)</td>${responses.map(r => `<td style="padding:8px 14px;text-align:right;"><strong style="color:#0891b2">${fmt(r.premium)}</strong></td>`).join('')}</tr>`
-        : [
-            ['Basic Premium (LKR)', r => fmt(r.basic_premium)],
-            ['SRCC (LKR)',          r => fmt(r.srcc_premium)],
-            ['TC (LKR)',            r => fmt(r.tc_premium)],
-            ['Admin Fee (LKR)',     r => fmt(r.admin_fee)],
-            ['VAT (LKR)',           r => fmt(r.vat_amount)],
-            ['Other (LKR)',         r => fmt(r.other_premium)],
-            ['Total Premium (LKR)', r => `<strong style="color:#255EAB">${fmt(r.premium)}</strong>`],
-          ].map(([label, getter], i) =>
-            `<tr style="background:${i%2===0?'#F2F7FC':'#fff'}"><td style="padding:8px 14px;font-weight:600;color:#374151;">${label}</td>${responses.map(r => `<td style="padding:8px 14px;text-align:right;">${getter(r)}</td>`).join('')}</tr>`
-          ).join('');
-      const deductiblesRow = `<tr style="background:#F2F7FC"><td style="padding:8px 14px;font-weight:600;color:#374151;">Deductibles</td>${responses.map(r => `<td style="padding:8px 14px;color:#4B5563;">${r.deductible||'—'}</td>`).join('')}</tr>`;
-      const excessRow      = `<tr><td style="padding:8px 14px;font-weight:600;color:#374151;">Excesses</td>${responses.map(r => `<td style="padding:8px 14px;color:#4B5563;">${r.excesses||'—'}</td>`).join('')}</tr>`;
+          (product?.hideInsurerTotal ? '' : `<tr style="background:#E0F2FE"><td style="padding:8px 14px;font-weight:800;color:#0891b2;">Grand Total (LKR)</td>${responses.map(r => `<td style="padding:8px 14px;text-align:right;"><strong style="color:#0891b2">${fmt(r.premium)}</strong></td>`).join('')}</tr>`)
+        : (() => {
+            const rows = [
+              ['basic_premium', 'Basic Premium (LKR)'],
+              ['srcc_premium',  'SRCC (LKR)'],
+              ['tc_premium',    'TC (LKR)'],
+              ['admin_fee',     'Admin Fee (LKR)'],
+              ['vat_amount',    'VAT (LKR)'],
+              ['other_premium', 'Other (LKR)'],
+            ].filter(([k]) => !hiddenPrem.has(k)).map(([k, label]) => [label, r => fmt(r[k])]);
+            customPrem.forEach(cf => rows.push([`${cf.label}${cf.type !== 'text' ? ' (LKR)' : ''}`,
+              r => { const v = respCustom(r, cf.key); return (v === '' || v == null) ? '—' : (cf.type === 'text' ? String(v) : fmt(v)); }]));
+            if (!product?.hideInsurerTotal) rows.push(['Total Premium (LKR)', r => `<strong style="color:#255EAB">${fmt(r.premium)}</strong>`]);
+            return rows.map(([label, getter], i) =>
+              `<tr style="background:${i%2===0?'#F2F7FC':'#fff'}"><td style="padding:8px 14px;font-weight:600;color:#374151;">${label}</td>${responses.map(r => `<td style="padding:8px 14px;text-align:right;">${getter(r)}</td>`).join('')}</tr>`
+            ).join('');
+          })();
+      const deductiblesRow = hiddenPrem.has('deductible') ? '' : `<tr style="background:#F2F7FC"><td style="padding:8px 14px;font-weight:600;color:#374151;">Deductibles</td>${responses.map(r => `<td style="padding:8px 14px;color:#4B5563;">${r.deductible||'—'}</td>`).join('')}</tr>`;
+      const excessRow      = hiddenPrem.has('excesses') ? '' : `<tr><td style="padding:8px 14px;font-weight:600;color:#374151;">Excesses</td>${responses.map(r => `<td style="padding:8px 14px;color:#4B5563;">${r.excesses||'—'}</td>`).join('')}</tr>`;
       const validityRow    = `<tr style="background:#F2F7FC"><td style="padding:8px 14px;font-weight:600;color:#374151;">Validity (days)</td>${responses.map(r => `<td style="padding:8px 14px;color:#4B5563;text-align:center;">${r.validity_days||'—'}</td>`).join('')}</tr>`;
       // Covers section (static + dynamic custom covers)
       const cvFields = [
@@ -1381,8 +1386,9 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
           ['Plan Total (LKR)',    r => Number(r.plan_premiums?.[pi]?.total || 0).toLocaleString()],
         ].forEach(([label, getter], i) => addDataRow(label, responses.map(getter), label.startsWith('Plan Total'), false, i));
       }
-      addDataRow('GRAND TOTAL (LKR)', responses.map(r => Number(r.premium || 0).toLocaleString()), true);
+      if (!product?.hideInsurerTotal) addDataRow('GRAND TOTAL (LKR)', responses.map(r => Number(r.premium || 0).toLocaleString()), true);
     } else {
+      let ri = 0;
       [
         ['Basic Premium (LKR)',  'basic_premium'],
         ['SRCC (LKR)',           'srcc_premium'],
@@ -1390,14 +1396,15 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
         ['Admin Fee (LKR)',      'admin_fee'],
         ['VAT (LKR)',            'vat_amount'],
         ['Other (LKR)',          'other_premium'],
-      ].forEach(([label, key], i) => addDataRow(label, responses.map(r => r[key] ? Number(r[key]).toLocaleString() : '—'), false, false, i));
-      addDataRow('TOTAL PREMIUM (LKR)', responses.map(r => Number(r.premium || 0).toLocaleString()), true);
+      ].filter(([, key]) => !hiddenPrem.has(key)).forEach(([label, key]) => addDataRow(label, responses.map(r => r[key] ? Number(r[key]).toLocaleString() : '—'), false, false, ri++));
+      customPrem.forEach(cf => addDataRow(`${cf.label}${cf.type !== 'text' ? ' (LKR)' : ''}`, responses.map(r => { const v = respCustom(r, cf.key); return (v === '' || v == null) ? '—' : (cf.type === 'text' ? String(v) : Number(v).toLocaleString()); }), false, false, ri++));
+      if (!product?.hideInsurerTotal) addDataRow('TOTAL PREMIUM (LKR)', responses.map(r => Number(r.premium || 0).toLocaleString()), true);
     }
 
     // ── Deductibles & Validity ──
     addSection('DEDUCTIBLES, EXCESSES & VALIDITY');
-    addDataRow('Deductibles',    responses.map(r => r.deductible    || '—'), false, false, 0);
-    addDataRow('Excesses',       responses.map(r => r.excesses      || '—'), false, false, 1);
+    if (!hiddenPrem.has('deductible')) addDataRow('Deductibles', responses.map(r => r.deductible || '—'), false, false, 0);
+    if (!hiddenPrem.has('excesses'))   addDataRow('Excesses',    responses.map(r => r.excesses   || '—'), false, false, 1);
     addDataRow('Validity (days)',responses.map(r => r.validity_days  || '—'), false, false, 2);
 
     // ── Commission (broker only) ──

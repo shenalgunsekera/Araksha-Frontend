@@ -7,6 +7,7 @@ import {
 import { db, ensureAnonymousUser } from '../firebase';
 import { uploadFile as uploadToCloudinary, openFile } from '../storage';
 import { PRODUCTS } from '../config/products';
+import { isInsurerFieldHidden, customInsurerRows, responseCustomValue, showInsurerTotal } from '../utils/insurerFields';
 
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -490,19 +491,22 @@ const QuoteResponsePage = () => {
             [`Plan ${pi + 1} — Tax (LKR)`,           Number(p.tax    || 0).toLocaleString()],
             [`Plan ${pi + 1} — Total (LKR)`,         Number(p.total  || 0).toLocaleString()],
           ]),
-          ['Grand Total (LKR)', Number(submittedData?.premium || 0).toLocaleString()],
+          ...(showInsurerTotal(productDef) ? [['Grand Total (LKR)', Number(submittedData?.premium || 0).toLocaleString()]] : []),
         ]
       : [
-          ['Total Premium (LKR)', Number(submittedData?.premium       || 0).toLocaleString()],
-          ['Basic Premium (LKR)', Number(submittedData?.basic_premium || 0).toLocaleString()],
-          ['SRCC (LKR)',          Number(submittedData?.srcc_premium  || 0).toLocaleString()],
-          ['TC (LKR)',            Number(submittedData?.tc_premium    || 0).toLocaleString()],
-          ['Admin Fee (LKR)',     Number(submittedData?.admin_fee     || 0).toLocaleString()],
-          ['VAT (LKR)',           Number(submittedData?.vat_amount    || 0).toLocaleString()],
+          ...(showInsurerTotal(productDef) ? [['Total Premium (LKR)', Number(submittedData?.premium || 0).toLocaleString()]] : []),
+          ...[
+            ['basic_premium', 'Basic Premium (LKR)'],
+            ['srcc_premium',  'SRCC (LKR)'],
+            ['tc_premium',    'TC (LKR)'],
+            ['admin_fee',     'Admin Fee (LKR)'],
+            ['vat_amount',    'VAT (LKR)'],
+          ].filter(([k]) => !isInsurerFieldHidden(productDef, k)).map(([k, label]) => [label, Number(submittedData?.[k] || 0).toLocaleString()]),
+          ...customInsurerRows(productDef).map(cf => { const v = responseCustomValue(submittedData, cf.key); return [`${cf.label}${cf.type !== 'text' ? ' (LKR)' : ''}`, (v === '' || v == null) ? '—' : (cf.type === 'text' ? String(v) : Number(v).toLocaleString())]; }),
         ]
     ).concat([
-      ['Deductibles',  submittedData?.deductible    || '—'],
-      ['Excesses',     submittedData?.excesses      || '—'],
+      ...(isInsurerFieldHidden(productDef, 'deductible') ? [] : [['Deductibles', submittedData?.deductible || '—']]),
+      ...(isInsurerFieldHidden(productDef, 'excesses')   ? [] : [['Excesses',    submittedData?.excesses   || '—']]),
       ['Quote Validity', submittedData?.validity_days ? `${submittedData.validity_days} days` : '—'],
       ['Notes / Terms',  submittedData?.notes        || '—'],
     ]);
@@ -691,19 +695,22 @@ const QuoteResponsePage = () => {
                       [`Plan ${pi + 1} — Tax`,    p.tax    ? `LKR ${Number(p.tax).toLocaleString()}`    : '—'],
                       [`Plan ${pi + 1} — Total`,  `LKR ${Number(p.total || 0).toLocaleString()}`],
                     ]),
-                    ['Grand Total',   `LKR ${Number(submittedData?.premium || 0).toLocaleString()}`],
+                    ...(showInsurerTotal(productDef) ? [['Grand Total', `LKR ${Number(submittedData?.premium || 0).toLocaleString()}`]] : []),
                   ]
                 : [
-                    ['Total Premium', `LKR ${Number(submittedData?.premium || 0).toLocaleString()}`],
-                    ['Basic Premium', submittedData?.basic_premium ? `LKR ${Number(submittedData.basic_premium).toLocaleString()}` : '—'],
-                    ['SRCC',         submittedData?.srcc_premium  ? `LKR ${Number(submittedData.srcc_premium).toLocaleString()}`  : '—'],
-                    ['TC',           submittedData?.tc_premium    ? `LKR ${Number(submittedData.tc_premium).toLocaleString()}`    : '—'],
-                    ['Admin Fee',    submittedData?.admin_fee     ? `LKR ${Number(submittedData.admin_fee).toLocaleString()}`     : '—'],
-                    ['VAT',          submittedData?.vat_amount    ? `LKR ${Number(submittedData.vat_amount).toLocaleString()}`    : '—'],
+                    ...(showInsurerTotal(productDef) ? [['Total Premium', `LKR ${Number(submittedData?.premium || 0).toLocaleString()}`]] : []),
+                    ...[
+                      ['basic_premium', 'Basic Premium'],
+                      ['srcc_premium',  'SRCC'],
+                      ['tc_premium',    'TC'],
+                      ['admin_fee',     'Admin Fee'],
+                      ['vat_amount',    'VAT'],
+                    ].filter(([k]) => !isInsurerFieldHidden(productDef, k)).map(([k, label]) => [label, submittedData?.[k] ? `LKR ${Number(submittedData[k]).toLocaleString()}` : '—']),
+                    ...customInsurerRows(productDef).map(cf => { const v = responseCustomValue(submittedData, cf.key); return [cf.label, (v === '' || v == null) ? '—' : (cf.type === 'text' ? String(v) : `LKR ${Number(v).toLocaleString()}`)]; }),
                   ]
               ).concat([
-                ['Deductibles', submittedData?.deductible    || '—'],
-                ['Excesses',    submittedData?.excesses      || '—'],
+                ...(isInsurerFieldHidden(productDef, 'deductible') ? [] : [['Deductibles', submittedData?.deductible || '—']]),
+                ...(isInsurerFieldHidden(productDef, 'excesses')   ? [] : [['Excesses',    submittedData?.excesses   || '—']]),
                 ['Validity',    submittedData?.validity_days ? `${submittedData.validity_days} days` : '—'],
                 ['Submitted',   new Date(submittedData?.submitted_at || Date.now()).toLocaleString('en-GB')],
               ]).map(([l, v]) => (
