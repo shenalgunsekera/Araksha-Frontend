@@ -97,14 +97,17 @@ const isInternalKey = (k) =>
 const prettyKey = (k) => k.replace(/^(cover_|clause_|fi_)/, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
 const CLAIM_FIELDS = [
-  { key: 'client_name',    label: 'Client Name',    type: 'string' },
-  { key: 'claim_no',       label: 'Claim No',       type: 'string' },
-  { key: 'insurer',        label: 'Insurer',        type: 'string' },
-  { key: 'status',         label: 'Status',         type: 'string' },
-  { key: 'claim_amount',   label: 'Claim Amount',   type: 'number' },
-  { key: 'settled_amount', label: 'Settled Amount', type: 'number' },
-  { key: 'product',        label: 'Product',        type: 'string' },
-  { key: 'main_class',     label: 'Main Class',     type: 'string' },
+  { key: 'reference',         label: 'Claim Reference',   type: 'string' },
+  { key: 'client_name',       label: 'Client Name',       type: 'string' },
+  { key: 'policy_no',         label: 'Policy No',         type: 'string' },
+  { key: 'product',           label: 'Product / Class',   type: 'string' },
+  { key: 'status',            label: 'Status',            type: 'string' },
+  { key: 'incident_date',     label: 'Incident Date',     type: 'date'   },
+  { key: 'cause',             label: 'Cause of Loss',     type: 'string' },
+  { key: 'loss_amount',       label: 'Estimated Loss',    type: 'number' },
+  { key: 'settlement_amount', label: 'Settlement Amount', type: 'number' },
+  { key: 'created_by_name',   label: 'Registered By',     type: 'string' },
+  { key: 'created_at',        label: 'Registered On',     type: 'date'   },
 ];
 
 // Quotation report fields — these map to the flattened quote rows built in loadData().
@@ -138,6 +141,9 @@ const QUOTE_FIELDS = [
   { key: 'response_count',     label: 'No. Responses',      type: 'number' },
   { key: 'declined_count',     label: 'No. Declined',       type: 'number' },
   { key: 'lowest_premium',     label: 'Lowest Premium',     type: 'number' },
+  // Origin
+  { key: 'source',             label: 'Source',             type: 'string' },
+  { key: 'marketer_name',      label: 'Marketer',           type: 'string' },
   // Audit
   { key: 'days_outstanding',   label: 'Days Outstanding',   type: 'number' },
   { key: 'created_by_name',    label: 'Created By',          type: 'string' },
@@ -912,6 +918,9 @@ const ReportsPage = () => {
         response_count:active.length,
         declined_count:resp.filter(r=>r.declined).length,
         lowest_premium:premiums.length?Math.min(...premiums):'',
+        // Origin
+        source:x.marketer_id?(x.source==='marketer'?'Marketer (POS)':'Marketer (Link)'):(x.source==='website'?'Website':'Staff'),
+        marketer_name:x.marketer_name||'',
         // Audit
         days_outstanding:created?Math.max(0,Math.round((Date.now()-created.getTime())/86400000)):'',
         created_by_name:x.created_by_name||'',
