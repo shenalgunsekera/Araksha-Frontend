@@ -79,6 +79,10 @@ function clientAddedMillis(c) {
   return isNaN(t) ? 0 : t;
 }
 
+// Fold the legacy 'Company' customer type into 'Corporate' so the underwriting
+// list, its filter chips, and reports all use one consistent vocabulary.
+const normCustType = (t) => (t === 'Company' ? 'Corporate' : (t || ''));
+
 function deriveYear(client) {
   const v = client.policy_period_from;
   if (!v) return '';
@@ -495,10 +499,15 @@ const TableSection = () => {
     return [...years].sort((a, b) => b - a);
   }, [clients]);
 
+  /* Customer types actually present in the data (Company folded into Corporate) */
+  const typeOptions = useMemo(
+    () => ['all', ...[...new Set(clients.map(c => normCustType(c.customer_type)).filter(Boolean))].sort()],
+    [clients]);
+
   /* filter + search */
   const filtered = useMemo(() => {
     let list = clients;
-    if (filterType !== 'all') list = list.filter(c => c.customer_type === filterType);
+    if (filterType !== 'all') list = list.filter(c => normCustType(c.customer_type) === filterType);
 
     // Date Added filters
     if (filterYear !== 'all' || filterMonth !== 'all') {
@@ -660,7 +669,7 @@ const TableSection = () => {
         {/* filter chips + date filters */}
         <Stack spacing={1}>
           <Stack direction="row" spacing={1} flexWrap="wrap">
-            {['all','Individual','Company'].map(t => (
+            {typeOptions.map(t => (
               <Chip
                 key={t}
                 label={t === 'all' ? 'All' : t}

@@ -72,7 +72,7 @@ const dropdowns = {
   main_class: MAIN_CLASSES,
   // Auto-generated from PRODUCTS config — if a product is added there, it appears here
   product: Object.values(PRODUCTS).filter(p => !p.hidden).map(p => p.label),
-  customer_type: ['Individual', 'Individual Inhouse', 'Company', 'Corporate Inhouse'],
+  customer_type: ['Individual', 'Individual Inhouse', 'Corporate', 'Corporate Inhouse'],
   insurance_provider: [
     'AIA Insurance', 'Allianz Insurance Lanka', 'Ceylinco General Insurance',
     'Ceylinco Life Insurance', 'Continental Insurance Lanka', 'Fairfirst Insurance',
@@ -367,7 +367,9 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
         obj.product = resolveProduct(initialData.product, initialData.product_key);
         return;
       }
-      const raw = initialData[f.name];
+      const raw0 = initialData[f.name];
+      // Legacy 'Company' customer_type → standardised 'Corporate'
+      const raw = (f.name === 'customer_type' && raw0 === 'Company') ? 'Corporate' : raw0;
       if (raw === undefined || raw === null || raw === '') { obj[f.name] = ''; return; }
       if (f.dropdown && dropdowns[f.name]) {
         obj[f.name] = dropdowns[f.name].includes(String(raw)) ? String(raw)

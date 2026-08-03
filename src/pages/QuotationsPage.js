@@ -2513,7 +2513,7 @@ const QuotationsPage = () => {
 
         // Proposer Details (quotation uses different field names)
         client_name:        fd.proposer_name || fd.company_name || fd.full_name || '',
-        customer_type:      fd.customer_type === 'Corporate' ? 'Company' : (fd.customer_type || ''),
+        customer_type:      fd.customer_type || '',
         nic_proof:          fd.nic_no      || '',
         business_registration: fd.business_reg || '',
         svat_proof:         fd.vat_no      || '',

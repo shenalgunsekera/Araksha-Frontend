@@ -877,7 +877,7 @@ const ReportsPage = () => {
     ]);
     // Compute O/S Days live (counts up from policy start, 0 once paid) so reports
     // never show the stale stored snapshot or a leftover value on paid policies.
-    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, os_days: liveOsDays(c), policy_status: policyStatus(c)}; }));
+    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, os_days: liveOsDays(c), policy_status: policyStatus(c), customer_type: c.customer_type==='Company'?'Corporate':(c.customer_type||'')}; }));
     setClaims(clS.docs.map(d=>({id:d.id,...d.data()})));
     // Flatten quotes into report-friendly rows (a quote is "finalised" once
     // the broker converts it — status 'confirmed').
