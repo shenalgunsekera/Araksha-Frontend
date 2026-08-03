@@ -564,6 +564,21 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
     );
   }, [productKey, allProducts]);
 
+  // Any product field in a section this form doesn't already render — e.g. a
+  // custom section/field created in the product editor, or the "Notes for
+  // Insurer" section — so admin-created fields always surface here and their
+  // values (carried over from the quote) are visible/editable in underwriting.
+  const KNOWN_UW_SECTIONS = useMemo(() => new Set([
+    ...textFields.map(f => f.section),
+    ...RISK_SECTIONS, 'Financial Interest', 'Claims History', 'Underwriting Information',
+    'Covers Required', 'Cover Required', 'Additional Clauses', 'Sum Insured', 'Document Uploads',
+  ]), []);
+  const customFields = useMemo(() => {
+    if (!productKey || !allProducts[productKey]) return [];
+    return (allProducts[productKey].fields || []).filter(f =>
+      f.type !== 'file' && f.type !== 'plantable' && f.section && !KNOWN_UW_SECTIONS.has(f.section));
+  }, [productKey, allProducts, KNOWN_UW_SECTIONS]);
+
   const prodDocFields = useMemo(() => {
     if (!productKey || !allProducts[productKey]) return [];
     return (allProducts[productKey].fields || []).filter(f =>
@@ -959,6 +974,26 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
             </Grid>
           </>
         )}
+
+        {/* ── Custom / additional product sections (from the product editor) ── */}
+        {(() => {
+          const visible = customFields.filter(isRiskFieldVisible);
+          if (!visible.length) return null;
+          const bySection = {};
+          visible.forEach(f => { (bySection[f.section] = bySection[f.section] || []).push(f); });
+          return Object.entries(bySection).map(([section, flds]) => (
+            <React.Fragment key={section}>
+              <SectionHeader title={section} />
+              <Grid container spacing={2} sx={{ mb: 2.5 }}>
+                {flds.map(f => (
+                  <Grid item xs={12} sm={f.type === 'textarea' ? 12 : 6} md={f.type === 'textarea' ? 12 : 4} key={f.name}>
+                    {renderRiskField(f)}
+                  </Grid>
+                ))}
+              </Grid>
+            </React.Fragment>
+          ));
+        })()}
 
         {/* ── Premium ──────────────────────────────────────── */}
         <SectionHeader title="Premium" />

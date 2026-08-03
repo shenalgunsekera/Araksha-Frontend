@@ -2564,6 +2564,7 @@ const QuotationsPage = () => {
 
         // Insurer fee/tax fields
         other_premium:     String(response.other_premium     || ''),
+        policy_fee:        String(response.policy_fees        || ''),
         policy_fees:       String(response.policy_fees       || ''),
         cess:              String(response.cess              || ''),
         road_safety_fee:   String(response.road_safety_tax   || ''),
