@@ -72,7 +72,7 @@ const dropdowns = {
   main_class: MAIN_CLASSES,
   // Auto-generated from PRODUCTS config — if a product is added there, it appears here
   product: Object.values(PRODUCTS).filter(p => !p.hidden).map(p => p.label),
-  customer_type: ['Individual', 'Company'],
+  customer_type: ['Individual', 'Individual Inhouse', 'Company', 'Corporate Inhouse'],
   insurance_provider: [
     'AIA Insurance', 'Allianz Insurance Lanka', 'Ceylinco General Insurance',
     'Ceylinco Life Insurance', 'Continental Insurance Lanka', 'Fairfirst Insurance',
