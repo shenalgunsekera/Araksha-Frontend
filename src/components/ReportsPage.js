@@ -158,6 +158,13 @@ const FILTER_OPS = {
   date:   ['after','before','between'],
 };
 
+// The four customer types the forms use. Legacy 'Company' and any raw imported
+// "Insured Detail" values (INTERCOMPANY, DSI EMPLOYEE, OUTSIDE COMPANY/INDIVIDUAL)
+// are folded to these so reports always show one clean, complete set.
+const CUSTOMER_TYPES = ['Individual', 'Individual Inhouse', 'Corporate', 'Corporate Inhouse'];
+const CT_ALIASES = { 'COMPANY':'Corporate', 'INTERCOMPANY':'Corporate Inhouse', 'DSI EMPLOYEE':'Individual Inhouse', 'OUTSIDE COMPANY':'Corporate', 'OUTSIDE INDIVIDUAL':'Individual' };
+const normCustomerType = (t) => { const s = String(t ?? '').trim(); if (!s) return ''; return CT_ALIASES[s.toUpperCase().replace(/\s+/g,' ')] || s; };
+
 const BUILTIN_TEMPLATES = [
   { id:'unfinalised_quotes', name:'Not Finalised Quotations', description:'Quotes where the customer went with another company (marked not finalised) — full quote detail', icon:'⏳', source:'quotes', fields:['reference','product','client_name','customer_type','mobile','email','nic_no','address','city','district','sum_insured','vehicle_no','period_from','period_to','status','not_finalised_at','selected_company','selected_premium','insurers_sent','sent_count','insurers_responded','response_count','declined_count','lowest_premium','days_outstanding','created_by_name','created_at'], groupBy:'', aggregations:[], filters:[{field:'not_finalised',op:'equals',value:'Yes'}], sortBy:'not_finalised_at', sortDir:'desc', viewMode:'flat', charts:[] },
 ];
@@ -878,7 +885,7 @@ const ReportsPage = () => {
     ]);
     // Compute O/S Days live (counts up from policy start, 0 once paid) so reports
     // never show the stale stored snapshot or a leftover value on paid policies.
-    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, ...liveCommission(c), os_days: liveOsDays(c), policy_status: policyStatus(c), customer_type: c.customer_type==='Company'?'Corporate':(c.customer_type||'')}; }));
+    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, ...liveCommission(c), os_days: liveOsDays(c), policy_status: policyStatus(c), customer_type: normCustomerType(c.customer_type)}; }));
     setClaims(clS.docs.map(d=>({id:d.id,...d.data()})));
     // Flatten quotes into report-friendly rows (a quote is "finalised" once
     // the broker converts it — status 'confirmed').
@@ -894,7 +901,7 @@ const ReportsPage = () => {
         product:x.product_label||x.product_key||'',
         // Proposer / client
         client_name:fd.proposer_name||fd.company_name||fd.full_name||fd.client_name||'',
-        customer_type:fd.customer_type||'',
+        customer_type:normCustomerType(fd.customer_type),
         mobile:fd.mobile||fd.mobile_no||'',
         email:fd.email||'',
         nic_no:fd.nic_no||fd.business_reg||fd.nic_proof||'',
@@ -974,6 +981,8 @@ const ReportsPage = () => {
       set.add(String(v));
       if (set.size > 300) break;
     }
+    // Customer type always offers the full canonical set, even if some aren't in the data yet.
+    if (fieldKey === 'customer_type') CUSTOMER_TYPES.forEach(t => set.add(t));
     return [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }, [source, clients, claims, quotes]);
 
