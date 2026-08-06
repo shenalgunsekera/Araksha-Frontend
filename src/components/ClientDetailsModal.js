@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { openFile } from '../storage';
 import { liveOsDays } from '../utils/osDays';
+import { liveCommission } from '../utils/commission';
 import { PRODUCTS } from '../config/products';
 import { db } from '../firebase';
 import { doc, updateDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
@@ -1004,23 +1005,25 @@ const ClientDetailsModal = ({ client, onClose }) => {
             )}
           </Box>
         );
-      case 6: /* Commission */
+      case 6: { /* Commission */
+        const lc = liveCommission(client);
         return (
           <Grid container spacing={2.5}>
             <Grid item xs={12} sm={6} md={4}><Field label="Commission Type"         value={client.commission_type} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="Basic Commission %"      value={client.commission_pct} /></Grid>
+            <Grid item xs={12} sm={6} md={4}><Field label="Basic Commission %"      value={lc.commission_pct} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Special Rate (+/- %)"    value={client.commission_special_rate} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="Commission Basic"        value={fmtLKR(client.commission_basic)} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="Commission SRCC"         value={fmtLKR(client.commission_srcc)} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="Commission TC"           value={fmtLKR(client.commission_tc)} /></Grid>
+            <Grid item xs={12} sm={6} md={4}><Field label="Commission Basic"        value={fmtLKR(lc.commission_basic)} /></Grid>
+            <Grid item xs={12} sm={6} md={4}><Field label="Commission SRCC"         value={fmtLKR(lc.commission_srcc)} /></Grid>
+            <Grid item xs={12} sm={6} md={4}><Field label="Commission TC"           value={fmtLKR(lc.commission_tc)} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Special Adjustment"      value={fmtLKR(client.commission_special_amount)} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="Total Commission"        value={fmtLKR(client.commission_total)} /></Grid>
+            <Grid item xs={12} sm={6} md={4}><Field label="Total Commission"        value={fmtLKR(lc.commission_total)} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Commission Method"       value={client.commission_paid_method} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Receive Date"            value={client.commission_receive_date} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Commission Amount Received"  value={fmtLKR(client.commission_amount_paid)} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Commission VAT"          value={fmtLKR(client.commission_vat)} /></Grid>
           </Grid>
         );
+      }
       case 12: /* Payment */
         return (
           <Grid container spacing={2.5}>
