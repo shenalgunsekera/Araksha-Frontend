@@ -631,6 +631,15 @@ const TableSection = () => {
             // Auto-calculations the form normally derives — computed on import so the
             // record shows complete totals without anyone re-saving it.
             const n = (v) => parseFloat(String(v ?? '').replace(/,/g, '')) || 0;
+            // Auto-calculate commission the same way the underwriting form does when the
+            // CSV doesn't supply it: basic × class rate, SRCC/TC × 5% (Motor) or 7.5%.
+            const BASIC_RATES = { Motor:20, Fire:20, Marine:15, Health:20, Miscellaneous:20, Individual:20, Group:20, Other:20 };
+            const basicRate = BASIC_RATES[clean.main_class] != null ? BASIC_RATES[clean.main_class] : 20;
+            const stRate = clean.main_class === 'Motor' ? 5 : 7.5;
+            if (!clean.commission_pct)                             clean.commission_pct   = String(basicRate);
+            if (!clean.commission_basic && n(clean.basic_premium)) clean.commission_basic = String(Math.round(n(clean.basic_premium) * basicRate) / 100);
+            if (!clean.commission_srcc  && n(clean.srcc_premium))  clean.commission_srcc  = String(Math.round(n(clean.srcc_premium)  * stRate)   / 100);
+            if (!clean.commission_tc    && n(clean.tc_premium))    clean.commission_tc    = String(Math.round(n(clean.tc_premium)    * stRate)   / 100);
             const commTotal = n(clean.commission_basic) + n(clean.commission_srcc) + n(clean.commission_tc) + n(clean.commission_special_amount);
             if (commTotal !== 0) clean.commission_total = String(Math.round(commTotal * 100) / 100);
             if (clean.policy_period_from && clean.policy_period_to && !clean.policy_days) {
