@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { collection, doc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { db } from '../firebase';
 import { confirmTypedDelete } from '../utils/confirmDelete';
 
@@ -28,6 +29,7 @@ import Pagination from '@mui/material/Pagination';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import LockResetOutlinedIcon from '@mui/icons-material/LockResetOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import SupervisorAccountOutlinedIcon from '@mui/icons-material/SupervisorAccountOutlined';
@@ -52,6 +54,19 @@ const UsersManager = ({ currentUserId, isAdmin }) => {
   const [deleteDlg,  setDeleteDlg]  = useState({ open: false, userId: null, userName: '' });
   const [editDlg,    setEditDlg]    = useState({ open: false, userId: null, fullName: '', phone: '', email: '' });
   const [saving,     setSaving]     = useState(false);
+  const [resetting,  setResetting]  = useState(false);
+
+  const sendReset = async () => {
+    if (!editDlg.email) return;
+    setResetting(true);
+    try {
+      await sendPasswordResetEmail(getAuth(), editDlg.email);
+      setToast({ open: true, msg: `Password reset link sent to ${editDlg.email}.`, severity: 'success' });
+    } catch (err) {
+      setToast({ open: true, msg: err.message, severity: 'error' });
+    }
+    setResetting(false);
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -220,7 +235,7 @@ const UsersManager = ({ currentUserId, isAdmin }) => {
                       )}
 
                       {(isAdmin || isSelf) && (
-                        <Tooltip title="Edit name & phone">
+                        <Tooltip title="Edit account & password">
                           <IconButton size="small" onClick={() => openEdit(u)}
                             sx={{ color: '#9CA3AF', '&:hover': { color: '#255EAB' } }}>
                             <EditOutlinedIcon fontSize="small" />
@@ -254,9 +269,9 @@ const UsersManager = ({ currentUserId, isAdmin }) => {
         </>
       )}
 
-      {/* Edit name & phone dialog */}
+      {/* Edit account dialog */}
       <Dialog open={editDlg.open} onClose={() => setEditDlg(d => ({ ...d, open: false }))} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: 16 }}>Edit Profile</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: 16 }}>Edit Account</DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: 12, color: '#9CA3AF', mb: 2 }}>{editDlg.email}</Typography>
           <Stack spacing={2}>
@@ -266,6 +281,19 @@ const UsersManager = ({ currentUserId, isAdmin }) => {
               onChange={e => setEditDlg(d => ({ ...d, phone: e.target.value }))}
               helperText="Shown to insurers & customers on quotes this person sends" />
           </Stack>
+          {isAdmin && (
+            <Box sx={{ mt: 2.5, pt: 1.5, borderTop: '1px solid rgba(0,0,0,0.07)' }}>
+              <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#374151', mb: 0.4 }}>Password</Typography>
+              <Typography sx={{ fontSize: 11.5, color: '#9CA3AF', mb: 1.2 }}>
+                For security, another user's password can't be typed in here. Send them a secure reset link and they choose a new password.
+              </Typography>
+              <Button size="small" variant="outlined" startIcon={<LockResetOutlinedIcon sx={{ fontSize: 17 }} />}
+                onClick={sendReset} disabled={resetting}
+                sx={{ borderColor: 'rgba(37,94,171,0.35)', color: '#255EAB' }}>
+                {resetting ? 'Sending…' : 'Send password reset email'}
+              </Button>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={() => setEditDlg(d => ({ ...d, open: false }))} variant="outlined"

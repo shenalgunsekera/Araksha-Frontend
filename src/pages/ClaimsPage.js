@@ -170,6 +170,7 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
   const [deleting, setDeleting] = useState(false);
   const [tracker, setTracker] = useState(claim.process_tracker || {});
   const [core, setCore] = useState({
+    claim_ref_id:  claim.claim_ref_id  || '',
     client_name:   claim.client_name   || '',
     policy_no:     claim.policy_no      || '',
     product:       claim.product        || '',
@@ -218,6 +219,9 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
           <Box sx={{ flex:1, minWidth:0 }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb:0.3 }}>
               <Typography sx={{ fontWeight:700, fontSize:14 }}>{claim.reference}</Typography>
+              {claim.claim_ref_id && (
+                <Chip label={`Ref: ${claim.claim_ref_id}`} size="small" sx={{ bgcolor:'rgba(37,94,171,0.10)', color:'#255EAB', fontWeight:700, fontSize:10.5 }} />
+              )}
               <Chip label={claim.status} size="small" sx={{ bgcolor:s.bg, color:s.color, fontWeight:700, fontSize:10.5 }} />
             </Stack>
             <Typography sx={{ fontSize:12, color:'#9CA3AF' }}>
@@ -231,6 +235,10 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
         </Box>
         <Collapse in={open} timeout={220} unmountOnExit>
           <Box sx={{ px:2.5, pb:2.5, pt:0.5, borderTop:'1px solid rgba(56,163,224,0.08)' }}>
+            <Typography sx={{ fontSize:11, fontWeight:800, color:'#255EAB', textTransform:'uppercase', letterSpacing:1, mb:1 }}>Claim Reference</Typography>
+            <Box sx={{ mb:2 }}>
+              <TextField size="small" label="Claim Ref ID" value={core.claim_ref_id} onChange={e=>setC('claim_ref_id', e.target.value)} sx={{ width:{ xs:'100%', sm:'50%' } }} />
+            </Box>
             <Typography sx={{ fontSize:11, fontWeight:800, color:'#255EAB', textTransform:'uppercase', letterSpacing:1, mb:1 }}>Claim Details</Typography>
             <Box sx={{ display:'grid', gridTemplateColumns:{ xs:'1fr', sm:'1fr 1fr' }, gap:1.5, mb:2 }}>
               <TextField size="small" label="Client Name" value={core.client_name} onChange={e=>setC('client_name', e.target.value)} />
@@ -272,7 +280,7 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
 }
 
 const EMPTY_FORM = {
-  client_name:'', policy_no:'', product:'', incident_date:'',
+  claim_ref_id:'', client_name:'', policy_no:'', product:'', incident_date:'',
   cause:'', description:'', loss_amount:'',
 };
 
@@ -424,6 +432,11 @@ const ClaimsPage = () => {
         <DialogTitle>Register New Claim</DialogTitle>
         <DialogContent sx={{pt:2.5}}>
           <Stack spacing={2}>
+            <Box>
+              <Typography sx={{ fontSize:11, fontWeight:800, color:'#255EAB', textTransform:'uppercase', letterSpacing:1, mb:1 }}>Claim Reference</Typography>
+              <TextField size="small" fullWidth label="Claim Ref ID" value={form.claim_ref_id} onChange={e=>set('claim_ref_id',e.target.value)} />
+            </Box>
+            <Typography sx={{ fontSize:11, fontWeight:800, color:'#255EAB', textTransform:'uppercase', letterSpacing:1, mt:0.5 }}>Claim Details</Typography>
             <TextField size="small" fullWidth label="Client Name *" value={form.client_name} onChange={e=>set('client_name',e.target.value)} />
             <Stack direction={{ xs:'column', sm:'row' }} spacing={1.5}>
               <TextField size="small" fullWidth label="Policy No" value={form.policy_no} onChange={e=>set('policy_no',e.target.value)} />

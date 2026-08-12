@@ -99,6 +99,7 @@ const prettyKey = (k) => k.replace(/^(cover_|clause_|fi_)/, '').replace(/_/g, ' 
 
 const CLAIM_FIELDS = [
   { key: 'reference',         label: 'Claim Reference',   type: 'string' },
+  { key: 'claim_ref_id',      label: 'Claim Ref ID',      type: 'string' },
   { key: 'client_name',       label: 'Client Name',       type: 'string' },
   { key: 'policy_no',         label: 'Policy No',         type: 'string' },
   { key: 'product',           label: 'Product / Class',   type: 'string' },
