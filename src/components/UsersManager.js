@@ -61,7 +61,7 @@ const UsersManager = ({ currentUserId, isAdmin }) => {
     setResetting(true);
     try {
       await sendPasswordResetEmail(getAuth(), editDlg.email);
-      setToast({ open: true, msg: `Password reset link sent to ${editDlg.email}.`, severity: 'success' });
+      setToast({ open: true, msg: `Reset link sent to ${editDlg.email}. It comes from a firebaseapp.com address — check the Spam/Junk folder if it doesn't arrive within a minute.`, severity: 'success' });
     } catch (err) {
       setToast({ open: true, msg: err.message, severity: 'error' });
     }
