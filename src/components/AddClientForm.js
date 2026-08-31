@@ -23,6 +23,10 @@ import Link from '@mui/material/Link';
 import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
@@ -55,6 +59,8 @@ const MAIN_CLASS_BY_TYPE = {
   General: ['Fire', 'Motor', 'Marine', 'Miscellaneous', 'Health'],
   Life:    ['Individual', 'Group', 'Other', 'Health'],
 };
+// Sentinel option in the Insurance Provider dropdown that opens the "add company" prompt.
+const ADD_PROVIDER_SENTINEL = '➕ Add Insurance Company…';
 const PRODUCT_MAIN_CLASS = {
   motor: 'Motor', mf: 'Motor',
   fire: 'Fire',
@@ -819,6 +825,48 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
     setSaving(false);
   };
 
+  /* ── Insurance Provider dropdown — base list + user-added companies saved to
+     Firestore ('insurance_providers') so they persist in the dropdown for
+     everyone, and flow to reports / PDFs / exports as the stored value. ────── */
+  const [customProviders,   setCustomProviders]   = useState([]);
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+  const [newProviderName,   setNewProviderName]   = useState('');
+  const [savingProvider,    setSavingProvider]    = useState(false);
+  const [providerError,     setProviderError]     = useState('');
+  useEffect(() => {
+    let alive = true;
+    getDocs(collection(db, 'insurance_providers'))
+      .then(snap => { if (alive) setCustomProviders(snap.docs.map(d => d.data().name).filter(Boolean)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const providerOptions = useMemo(() => {
+    const merged = (dropdowns.insurance_provider || []).filter(p => p !== 'Other');
+    const has = (v) => merged.some(x => x.toLowerCase() === v.toLowerCase());
+    customProviders.forEach(p => { if (!has(p)) merged.push(p); });
+    const cur = fields.insurance_provider;                 // keep a legacy/custom value visible
+    if (cur && cur !== ADD_PROVIDER_SENTINEL && !has(cur)) merged.push(cur);
+    merged.push(ADD_PROVIDER_SENTINEL);
+    return merged;
+  }, [customProviders, fields.insurance_provider]);
+  const handleProviderChange = (name, value) => {
+    if (value === ADD_PROVIDER_SENTINEL) { setNewProviderName(''); setProviderError(''); setProviderDialogOpen(true); return; }
+    set(name, value);
+  };
+  const saveNewProvider = async () => {
+    const nm = newProviderName.trim();
+    if (!nm) { setProviderError('Enter an insurance company name.'); return; }
+    const dupe = providerOptions.some(p => p !== ADD_PROVIDER_SENTINEL && p.toLowerCase() === nm.toLowerCase());
+    setSavingProvider(true); setProviderError('');
+    try {
+      if (!dupe) await addDoc(collection(db, 'insurance_providers'), { name: nm, created_at: serverTimestamp() });
+      setCustomProviders(prev => (prev.some(p => p.toLowerCase() === nm.toLowerCase()) ? prev : [...prev, nm]));
+      set('insurance_provider', nm);
+      setProviderDialogOpen(false); setNewProviderName('');
+    } catch (err) { setProviderError(err?.message || 'Could not save. Please try again.'); }
+    setSavingProvider(false);
+  };
+
   /* ── render helpers ──────────────────────────────────────────────────── */
   const renderDropdown = (f, val, onChangeFn) => (
     <FormControl fullWidth size="small" key={f.name}>
@@ -827,7 +875,7 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
         onChange={e => onChangeFn(f.name, e.target.value)} required={!!f.required}
         sx={{ borderRadius: '10px', fontSize: 13 }}>
         {/* Product list includes custom products so custom-product quotes resolve here */}
-        {(f.name === 'product' ? productOptions : f.name === 'main_class' ? mainClassOptions : (dropdowns[f.name] || [])).map(opt => <MenuItem key={opt} value={opt} sx={{ fontSize: 13 }}>{opt}</MenuItem>)}
+        {(f.name === 'product' ? productOptions : f.name === 'main_class' ? mainClassOptions : f.name === 'insurance_provider' ? providerOptions : (dropdowns[f.name] || [])).map(opt => <MenuItem key={opt} value={opt} sx={{ fontSize: 13, ...(opt === ADD_PROVIDER_SENTINEL ? { color: '#255EAB', fontWeight: 700 } : {}) }}>{opt}</MenuItem>)}
       </Select>
       {f.required && !val && <FormHelperText error>{f.label} is required</FormHelperText>}
     </FormControl>
@@ -835,7 +883,7 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
 
   const renderStaticField = (f) => {
     const isReadOnly = !!f.readOnly;
-    if (f.dropdown && dropdowns[f.name]) return renderDropdown(f, fields[f.name], set);
+    if (f.dropdown && dropdowns[f.name]) return renderDropdown(f, fields[f.name], f.name === 'insurance_provider' ? handleProviderChange : set);
     if (f.date) return (
       <DatePicker key={f.name} label={f.label} value={dates[f.name]} onChange={val => handleDate(f.name, val)}
         slotProps={{ textField: { fullWidth: true, size: 'small', required: !!f.required,
@@ -1396,6 +1444,31 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
           </Button>
         </Box>
       </Box>
+
+      {/* Add Insurance Company — saved permanently to the provider dropdown */}
+      <Dialog open={providerDialogOpen} onClose={() => !savingProvider && setProviderDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: 16 }}>Add Insurance Company</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: 12.5, color: '#6B7280', mb: 1.5 }}>
+            This company is saved permanently and will appear in the Insurance Provider dropdown from now on.
+          </Typography>
+          <TextField autoFocus fullWidth size="small" label="Insurance Company Name"
+            value={newProviderName}
+            onChange={e => setNewProviderName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveNewProvider(); } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
+          {providerError && <Alert severity="error" sx={{ mt: 1.5, borderRadius: '10px', py: 0 }}>{providerError}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setProviderDialogOpen(false)} disabled={savingProvider}
+            sx={{ color: '#6B7280', textTransform: 'none' }}>Cancel</Button>
+          <Button onClick={saveNewProvider} variant="contained" disabled={savingProvider}
+            startIcon={savingProvider ? <CircularProgress size={14} color="inherit" /> : null}
+            sx={{ textTransform: 'none', minWidth: 110 }}>
+            {savingProvider ? 'Saving…' : 'Save & Select'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </LocalizationProvider>
   );
 };
