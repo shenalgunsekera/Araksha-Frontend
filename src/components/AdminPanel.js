@@ -13,6 +13,7 @@ import { saveAs } from 'file-saver';
 import logoUrl from '../Araksha Logo.png';
 import { textFields as UW_FIELDS } from './AddClientForm';
 import { exportHeader } from '../utils/csvHeaders';
+import { buildClaimsCsv, claimDocFileName } from '../utils/claimsIo';
 import PendingApprovals from './PendingApprovals';
 import CreateAccountModal from './CreateAccountModal';
 import InsuranceCompaniesManager from './InsuranceCompaniesManager';
@@ -774,13 +775,15 @@ const AdminPanel = () => {
 
     try {
       // ── 1. Load all data ──────────────────────────────────────────────────
-      const [clientSnap, quoteSnap] = await Promise.all([
+      const [clientSnap, quoteSnap, claimSnap] = await Promise.all([
         getDocs(query(collection(db, 'clients'),    orderBy('created_at', 'desc'))),
         getDocs(query(collection(db, 'quotes'),     orderBy('created_at', 'desc'))),
+        getDocs(query(collection(db, 'claims'),     orderBy('created_at', 'desc'))),
       ]);
       const clients = clientSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       const quotes  = quoteSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const total   = clients.length + quotes.length;
+      const claims  = claimSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const total   = clients.length + quotes.length + claims.length;
 
       setBackupState({ step: 'Loading company logo…', progress: 2, done: false });
       const logoBase64 = await fetchLogoBase64();
@@ -788,6 +791,7 @@ const AdminPanel = () => {
       const masterZip = new JSZip();
       const clientsFolder = masterZip.folder('clients');
       const quotesFolder  = masterZip.folder('quotations');
+      const claimsFolder  = masterZip.folder('claims');
       const bulkFolder    = masterZip.folder('bulk_documents');
 
       // ── 2. Clients ────────────────────────────────────────────────────────
@@ -874,6 +878,40 @@ const AdminPanel = () => {
         }
       }
 
+      // ── 3b. Claims ────────────────────────────────────────────────────────
+      for (let i = 0; i < claims.length; i++) {
+        const cl  = claims[i];
+        const ref = (cl.reference || cl.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+        const folder = claimsFolder.folder(ref);
+
+        setBackupState({
+          step: `Claims ${i + 1}/${claims.length}: ${cl.reference || ref}`,
+          progress: 4 + Math.round(((clients.length + quotes.length + i) / total) * 78),
+          done: false,
+        });
+
+        // Full claim record incl. tracker + document links
+        folder.file('claim_data.json', JSON.stringify({
+          ...cl,
+          created_at: cl.created_at?.toDate?.()?.toISOString() || cl.created_at || '',
+          updated_at: cl.updated_at?.toDate?.()?.toISOString() || cl.updated_at || '',
+        }, null, 2));
+
+        // Tracker documents — named {Reference}__{step}__{name} so a later
+        // Claims → Import Documents re-attaches each file to the right step.
+        const tracker = cl.process_tracker || {};
+        for (const [stepKey, stepVal] of Object.entries(tracker)) {
+          for (const d of (stepVal?.docs || [])) {
+            if (!d?.url) continue;
+            const buf = await fetchFile(d.url);
+            if (!buf) continue;
+            const fname = claimDocFileName(ref, stepKey, d.name || `file.${extFromUrl(d.url)}`);
+            folder.file(fname, buf);
+            bulkFolder.file(fname, buf);
+          }
+        }
+      }
+
       // ── 4. Root import files ──────────────────────────────────────────────
       setBackupState({ step: 'Building import files…', progress: 83, done: false });
 
@@ -882,6 +920,9 @@ const AdminPanel = () => {
 
       // QUOTATIONS_IMPORT.csv — drop into Quotations → Restore Backup (CSV)
       masterZip.file('QUOTATIONS_IMPORT.csv', buildQuotationsImportCsv(quotes));
+
+      // CLAIMS_IMPORT.csv — drop into Claims → Import CSV to restore all claims
+      masterZip.file('CLAIMS_IMPORT.csv', buildClaimsCsv(claims));
 
       // QUOTATIONS_DATA.xlsx — full quotations summary with responses
       try {
@@ -898,6 +939,7 @@ const AdminPanel = () => {
         '────────────────',
         'CLIENTS_IMPORT.csv      → Upload to Underwriting → Import CSV to restore all client records',
         'QUOTATIONS_IMPORT.csv   → Upload to Quotations → Restore Backup (CSV) to restore all quotes',
+        'CLAIMS_IMPORT.csv       → Upload to Claims → Import CSV to restore all claims (incl. tracker)',
         'QUOTATIONS_DATA.xlsx    → Full quotations summary including all insurer responses',
         'clients/{FileNo}_{Name}/',
         '  info.xlsx             → Detailed client record (formatted)',
@@ -913,6 +955,9 @@ const AdminPanel = () => {
         '  quote_data.json       → Complete quote including form values, doc URLs, and all insurer responses',
         '  response_{Insurer}.pdf → Insurer-submitted quote documents',
         '  form_{doctype}.pdf/.jpg → Quotation form documents (vehicle images, risk photos, etc.)',
+        'claims/{Reference}/',
+        '  claim_data.json       → Complete claim including the process tracker and document links',
+        '  {Reference}__{step}__{name} → Claim documents; drag these into Claims → Import Documents to restore',
         'bulk_documents/         → All documents flat-named for easy bulk access',
         '  {FileNo}_{Name}_{doctype}.{ext}',
         '',
@@ -921,9 +966,11 @@ const AdminPanel = () => {
         '1. Client data:    Underwriting → Import CSV → upload CLIENTS_IMPORT.csv',
         '2. Quotations:     Quotations → Restore Backup → upload QUOTATIONS_IMPORT.csv',
         '   (for full response data use the quote_data.json files)',
-        '3. Documents:      Already downloaded in each folder. Re-upload to Firebase Storage',
-        '                   and update the URLs in each client/quote record if needed.',
-        '4. Reference:      Use QUOTATIONS_DATA.xlsx for a full formatted quotations summary.',
+        '3. Claims:         Claims → Import CSV → upload CLAIMS_IMPORT.csv, then',
+        '                   Claims → Import Documents → drag the files from each claims/{Reference}/ folder.',
+        '4. Documents:      Already downloaded in each folder. Re-upload to Firebase Storage',
+        '                   and update the URLs in each record if needed.',
+        '5. Reference:      Use QUOTATIONS_DATA.xlsx for a full formatted quotations summary.',
       ].join('\n'));
 
       // ── 5. Generate final ZIP ─────────────────────────────────────────────
