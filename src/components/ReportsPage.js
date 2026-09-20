@@ -32,6 +32,8 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import InputAdornment from '@mui/material/InputAdornment';
+import SearchIcon from '@mui/icons-material/Search';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -856,6 +858,8 @@ const ReportsPage = () => {
   const [source,       setSource]       = useState('clients');
   const [selFields,    setSelFields]    = useState(['client_name','insurance_provider','net_premium','total_invoice']);
   const [summaryFields, setSummaryFields] = useState([]); // numeric fields featured in the top stat cards
+  const [fieldSearch,   setFieldSearch]   = useState('');
+  const [summarySearch, setSummarySearch] = useState('');
   const [groupBy,      setGroupBy]      = useState('');
   const [aggregations, setAggregations] = useState([]);
   const [filters,      setFilters]      = useState([]);
@@ -894,7 +898,7 @@ const ReportsPage = () => {
     ]);
     // Compute O/S Days live (counts up from policy start, 0 once paid) so reports
     // never show the stale stored snapshot or a leftover value on paid policies.
-    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, ...liveCommission(c), os_days: liveOsDays(c), policy_status: policyStatus(c), customer_type: normCustomerType(c.customer_type)}; }));
+    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, ...liveCommission(c), os_days: liveOsDays(c), policy_status: policyStatus(c), customer_type: normCustomerType(c.customer_type), new_renewal: c.new_renewal || ((c.main_class==='Marine'||/marine/i.test(c.product||''))?'New':'')}; }));
     setClaims(clS.docs.map(d=>{
       const c={id:d.id,...d.data()};
       // Surface the process-tracker richness (per-step notes, uploaded docs and
@@ -1280,9 +1284,12 @@ const ReportsPage = () => {
 
                 {/* Fields */}
                 <Typography sx={{fontSize:11,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:0.8,mb:1}}>Fields to Show</Typography>
+                <TextField size="small" fullWidth placeholder="Search fields…" value={fieldSearch} onChange={e=>setFieldSearch(e.target.value)}
+                  InputProps={{startAdornment:(<InputAdornment position="start"><SearchIcon sx={{fontSize:16,color:'#9CA3AF'}}/></InputAdornment>)}}
+                  sx={{mb:1,'& .MuiOutlinedInput-root':{fontSize:12,borderRadius:'8px'}}}/>
                 <Box sx={{maxHeight:180,overflowY:'auto',border:'1px solid rgba(0,0,0,0.08)',borderRadius:'8px',p:1,mb:1}}>
-                  {sourceFields.map(f=>(
-                    <FormControlLabel key={f.key} control={<Checkbox size="small" checked={selFields.includes(f.key)} onChange={()=>setSelFields(p=>p.includes(f.key)?p.filter(k=>k!==f.key):[...p,f.key])} sx={{color:'#38A3E0','&.Mui-checked':{color:'#255EAB'},p:0.5}}/>} label={<Typography sx={{fontSize:12}}>{f.label}</Typography>} sx={{display:'block',m:0,py:0.2}}/>
+                  {sourceFields.filter(f=>f.label.toLowerCase().includes(fieldSearch.trim().toLowerCase())).map(f=>(
+                    <FormControlLabel key={f.key} control={<Checkbox size="small" checked={selFields.includes(f.key)} onChange={()=>setSelFields(p=>p.includes(f.key)?p.filter(k=>k!==f.key):[...p,f.key])} sx={{color:'#38A3E0','&.Mui-checked':{color:'#255EAB'},p:0.5}}/>} label={<Typography sx={{fontSize:12}}>{f.label}</Typography>} sx={{display:'flex',alignItems:'center',m:0,py:0.2}}/>
                   ))}
                 </Box>
                 <Stack direction="row" spacing={1} sx={{mb:2.5}}>
@@ -1292,9 +1299,12 @@ const ReportsPage = () => {
 
                 {/* Summary cards — choose which numeric totals appear in the top boxes */}
                 <Typography sx={{fontSize:11,fontWeight:800,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:0.8,mb:1}}>Summary Cards (totals)</Typography>
+                <TextField size="small" fullWidth placeholder="Search totals…" value={summarySearch} onChange={e=>setSummarySearch(e.target.value)}
+                  InputProps={{startAdornment:(<InputAdornment position="start"><SearchIcon sx={{fontSize:16,color:'#9CA3AF'}}/></InputAdornment>)}}
+                  sx={{mb:1,'& .MuiOutlinedInput-root':{fontSize:12,borderRadius:'8px'}}}/>
                 <Box sx={{maxHeight:140,overflowY:'auto',border:'1px solid rgba(0,0,0,0.08)',borderRadius:'8px',p:1,mb:0.5}}>
-                  {sourceFields.filter(f=>f.type==='number').map(f=>(
-                    <FormControlLabel key={f.key} control={<Checkbox size="small" checked={summaryFields.includes(f.key)} onChange={()=>setSummaryFields(p=>p.includes(f.key)?p.filter(k=>k!==f.key):[...p,f.key])} sx={{color:'#6366f1','&.Mui-checked':{color:'#6366f1'},p:0.5}}/>} label={<Typography sx={{fontSize:12}}>{f.label}</Typography>} sx={{display:'block',m:0,py:0.2}}/>
+                  {sourceFields.filter(f=>f.type==='number'&&f.label.toLowerCase().includes(summarySearch.trim().toLowerCase())).map(f=>(
+                    <FormControlLabel key={f.key} control={<Checkbox size="small" checked={summaryFields.includes(f.key)} onChange={()=>setSummaryFields(p=>p.includes(f.key)?p.filter(k=>k!==f.key):[...p,f.key])} sx={{color:'#6366f1','&.Mui-checked':{color:'#6366f1'},p:0.5}}/>} label={<Typography sx={{fontSize:12}}>{f.label}</Typography>} sx={{display:'flex',alignItems:'center',m:0,py:0.2}}/>
                   ))}
                 </Box>
                 <Typography sx={{fontSize:10.5,color:'#9CA3AF',mb:2.5}}>

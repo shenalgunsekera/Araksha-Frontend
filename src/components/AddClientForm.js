@@ -97,6 +97,7 @@ const dropdowns = {
   insurance_type: ['General', 'Life'],
   sum_insured_currency: ['LKR', 'USD', 'EUR', 'GBP', 'AUD', 'JPY', 'INR', 'SGD', 'Other'],
   main_class: MAIN_CLASSES,
+  new_renewal: ['New', 'Renewal'],
   // Auto-generated from PRODUCTS config — if a product is added there, it appears here
   product: Object.values(PRODUCTS).filter(p => !p.hidden).map(p => p.label),
   customer_type: ['Individual', 'Individual Inhouse', 'Corporate', 'Corporate Inhouse'],
@@ -147,6 +148,7 @@ export const textFields = [
   { label: 'Product',            name: 'product',            section: 'Insurance Company', dropdown: true, required: true },
   { label: 'Insurance Provider', name: 'insurance_provider', section: 'Insurance Company', dropdown: true, required: true },
   { label: 'Branch',             name: 'branch',             section: 'Insurance Company', dropdown: true },
+  { label: 'New / Renewal',      name: 'new_renewal',        section: 'Insurance Company', dropdown: true },
   // Proposer Details
   { label: 'Customer Type',      name: 'customer_type',      section: 'Proposer Details', dropdown: true, required: true },
   { label: 'Client Name',        name: 'client_name',        section: 'Proposer Details', required: true },
@@ -408,6 +410,9 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
     });
     docFields.forEach(f => { obj[f.text] = initialData[f.text] || ''; });
     if (!obj.sum_insured_currency) obj.sum_insured_currency = 'LKR'; // sensible default
+    // Marine policies default to New when the field is blank (existing records
+    // predate this field); every other class is left blank to be set manually.
+    if (!obj.new_renewal && (obj.main_class === 'Marine' || /marine/i.test(obj.product || ''))) obj.new_renewal = 'New';
     return obj;
   });
 
