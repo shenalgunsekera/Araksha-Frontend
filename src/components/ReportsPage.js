@@ -108,6 +108,9 @@ const CLAIM_FIELDS = [
   { key: 'cause',             label: 'Cause of Loss',     type: 'string' },
   { key: 'loss_amount',       label: 'Estimated Loss',    type: 'number' },
   { key: 'settlement_amount', label: 'Settlement Amount', type: 'number' },
+  { key: 'documents_count',   label: 'Documents',         type: 'number' },
+  { key: 'links_count',       label: 'Links',             type: 'number' },
+  { key: 'tracker_notes',     label: 'Tracker Notes',     type: 'string' },
   { key: 'created_by_name',   label: 'Registered By',     type: 'string' },
   { key: 'created_at',        label: 'Registered On',     type: 'date'   },
 ];
@@ -892,7 +895,14 @@ const ReportsPage = () => {
     // Compute O/S Days live (counts up from policy start, 0 once paid) so reports
     // never show the stale stored snapshot or a leftover value on paid policies.
     setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, ...liveCommission(c), os_days: liveOsDays(c), policy_status: policyStatus(c), customer_type: normCustomerType(c.customer_type)}; }));
-    setClaims(clS.docs.map(d=>({id:d.id,...d.data()})));
+    setClaims(clS.docs.map(d=>{
+      const c={id:d.id,...d.data()};
+      // Surface the process-tracker richness (per-step notes, uploaded docs and
+      // pasted links) as flat, reportable fields.
+      const tr=c.process_tracker||{}; let docs=0, links=0; const notes=[];
+      Object.values(tr).forEach(st=>{ docs+=(st?.docs?.length||0); links+=(st?.links?.length||0); if(st?.note && String(st.note).trim()) notes.push(String(st.note).trim()); });
+      return {...c, documents_count:docs, links_count:links, tracker_notes:notes.join(' | ')};
+    }));
     // Flatten quotes into report-friendly rows (a quote is "finalised" once
     // the broker converts it — status 'confirmed').
     setQuotes(qS.docs.map(d=>{

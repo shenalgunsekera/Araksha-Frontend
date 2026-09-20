@@ -206,13 +206,13 @@ export const textFields = [
   { label: 'Debit Note Date',    name: 'debit_note_date',    section: 'Payment', date: true },
   // Commission
   { label: 'Commission Type',    name: 'commission_type',    section: 'Commission', dropdown: true },
-  { label: 'Basic Commission %', name: 'commission_pct',     section: 'Commission', type: 'number', readOnly: true },
+  { label: 'Basic Commission %', name: 'commission_pct',     section: 'Commission', type: 'number' },
   { label: 'Special Rate (+/- %)', name: 'commission_special_rate', section: 'Commission', type: 'number' },
   { label: 'Commission Basic',   name: 'commission_basic',   section: 'Commission', type: 'number' },
   { label: 'Commission SRCC',    name: 'commission_srcc',    section: 'Commission', type: 'number' },
   { label: 'Commission TC',      name: 'commission_tc',      section: 'Commission', type: 'number' },
-  { label: 'Special Adjustment', name: 'commission_special_amount', section: 'Commission', type: 'number', readOnly: true },
-  { label: 'Total Commission',   name: 'commission_total',   section: 'Commission', type: 'number', readOnly: true },
+  { label: 'Special Adjustment', name: 'commission_special_amount', section: 'Commission', type: 'number' },
+  { label: 'Total Commission',   name: 'commission_total',   section: 'Commission', type: 'number' },
   { label: 'Commission Method',  name: 'commission_paid_method', section: 'Commission', dropdown: true },
   { label: 'Commission Receive Date', name: 'commission_receive_date', section: 'Commission', date: true },
   { label: 'Commission Amount Received', name: 'commission_amount_paid',  section: 'Commission', type: 'number' },
@@ -762,6 +762,14 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
     setError('');
     for (const f of textFields.filter(f => f.required && !f.readOnly)) {
       if (!fields[f.name]?.trim()) { setError(`${f.label} is required`); return; }
+    }
+    // Commission is compulsory to match the chosen type: Standard needs the
+    // standard commission (Total Commission), Special needs the special commission.
+    if (fields.commission_type === 'Standard' && !num(fields.commission_total)) {
+      setError('Total Commission is required for a Standard commission'); return;
+    }
+    if (fields.commission_type === 'Special' && !num(fields.commission_special_amount) && !num(fields.commission_special_rate)) {
+      setError('Special commission (Special Rate or Special Adjustment) is required for a Special commission'); return;
     }
     setSaving(true);
     try {

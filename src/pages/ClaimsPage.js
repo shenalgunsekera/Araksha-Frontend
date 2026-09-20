@@ -112,10 +112,11 @@ function ClaimProcessTracker({ value, onChange, claimId, brandPrefix, accent }) 
     onChange({ ...tracker, [key]: { ...(tracker[key] || {}), note: v } });
 
   const addLink = (key) => {
-    const raw = (window.prompt('Paste a video or document link (YouTube, Drive, etc.)') || '').trim();
-    if (!raw) return;
-    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-    onChange({ ...tracker, [key]: { ...(tracker[key] || {}), links: [...(tracker[key]?.links || []), { url }] } });
+    const raw = window.prompt('Paste one or more video / document links (YouTube, Drive, etc.).\nSeparate multiple links with a new line, comma or space.') || '';
+    const added = raw.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
+      .map(u => ({ url: /^https?:\/\//i.test(u) ? u : `https://${u}` }));
+    if (!added.length) return;
+    onChange({ ...tracker, [key]: { ...(tracker[key] || {}), links: [...(tracker[key]?.links || []), ...added] } });
   };
 
   const removeLink = (key, idx) =>
@@ -300,15 +301,19 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
               {claim.client_name} · {claim.policy_no} · Filed: {filed}
             </Typography>
           </Box>
-          <Box sx={{ textAlign:'right', flexShrink:0, lineHeight:1.25 }}>
-            <Typography sx={{ fontSize:9.5, fontWeight:800, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:0.4 }}>Est. Loss</Typography>
-            <Typography sx={{ fontWeight:800, fontSize:14, color:'#255EAB' }}>
-              {claim.loss_amount ? `LKR ${Number(claim.loss_amount).toLocaleString()}` : '—'}
-            </Typography>
-            <Typography sx={{ fontSize:9.5, fontWeight:800, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:0.4, mt:0.4 }}>Settled</Typography>
-            <Typography sx={{ fontWeight:800, fontSize:13.5, color:'#059669' }}>
-              {claim.settlement_amount ? `LKR ${Number(claim.settlement_amount).toLocaleString()}` : '—'}
-            </Typography>
+          <Box sx={{ display:'flex', gap:{ xs:1.5, sm:3 }, flexShrink:0, lineHeight:1.25 }}>
+            <Box sx={{ textAlign:'right' }}>
+              <Typography sx={{ fontSize:9.5, fontWeight:800, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:0.4 }}>Est. Loss</Typography>
+              <Typography sx={{ fontWeight:800, fontSize:14, color:'#255EAB', whiteSpace:'nowrap' }}>
+                {claim.loss_amount ? `LKR ${Number(claim.loss_amount).toLocaleString()}` : '—'}
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign:'right' }}>
+              <Typography sx={{ fontSize:9.5, fontWeight:800, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:0.4 }}>Settled</Typography>
+              <Typography sx={{ fontWeight:800, fontSize:14, color:'#059669', whiteSpace:'nowrap' }}>
+                {claim.settlement_amount ? `LKR ${Number(claim.settlement_amount).toLocaleString()}` : '—'}
+              </Typography>
+            </Box>
           </Box>
           {open ? <ExpandLessIcon sx={{ color:'#9CA3AF' }} /> : <ExpandMoreIcon sx={{ color:'#9CA3AF' }} />}
         </Box>
