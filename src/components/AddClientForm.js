@@ -21,6 +21,7 @@ import LinearProgress from '@mui/material/LinearProgress';
 import Alert from '@mui/material/Alert';
 import Link from '@mui/material/Link';
 import Chip from '@mui/material/Chip';
+import Autocomplete from '@mui/material/Autocomplete';
 import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
@@ -867,6 +868,29 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
     setSavingProvider(false);
   };
 
+  /* ── Existing-client lookup — type a name in Proposer Details to match an
+     existing client and auto-fill their proposer / contact details. ───────── */
+  const [existingClients, setExistingClients] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    getDocs(collection(db, 'clients'))
+      .then(snap => { if (alive) setExistingClients(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(c => c.client_name)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const PROPOSER_COPY = ['customer_type', 'nic_proof', 'business_registration', 'svat_proof',
+    'street1', 'street2', 'city', 'district', 'province', 'postal_code',
+    'telephone', 'mobile_no', 'email', 'contact_person', 'social_media'];
+  const fillFromClient = (c) => {
+    if (!c) return;
+    set('client_name', c.client_name || '');
+    PROPOSER_COPY.forEach(k => {
+      let v = c[k];
+      if (k === 'customer_type' && v === 'Company') v = 'Corporate';
+      if (v != null && v !== '') set(k, v);
+    });
+  };
+
   /* ── render helpers ──────────────────────────────────────────────────── */
   const renderDropdown = (f, val, onChangeFn) => (
     <FormControl fullWidth size="small" key={f.name}>
@@ -883,6 +907,38 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
 
   const renderStaticField = (f) => {
     const isReadOnly = !!f.readOnly;
+    // Client Name — suggest existing clients as you type; pick one to auto-fill
+    // all proposer / contact details from that client record.
+    if (f.name === 'client_name' && existingClients.length > 0) {
+      return (
+        <Autocomplete key={f.name} freeSolo options={existingClients}
+          getOptionLabel={(o) => (typeof o === 'string' ? o : (o.client_name || ''))}
+          filterOptions={(opts, state) => {
+            const q = (state.inputValue || '').trim().toLowerCase();
+            if (!q) return [];
+            return opts.filter(o => (o.client_name || '').toLowerCase().includes(q)).slice(0, 8);
+          }}
+          inputValue={fields.client_name || ''}
+          onInputChange={(_, val, reason) => { if (reason !== 'reset') set('client_name', val); }}
+          onChange={(_, val) => { if (val && typeof val === 'object') fillFromClient(val); }}
+          isOptionEqualToValue={(o, v) => o.id === v.id}
+          renderOption={(props, o) => (
+            <li {...props} key={o.id}>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{o.client_name}</Typography>
+                <Typography sx={{ fontSize: 11, color: '#9CA3AF' }}>
+                  {[o.nic_proof || o.business_registration, o.mobile_no || o.telephone].filter(Boolean).join(' · ') || 'Existing client'}
+                </Typography>
+              </Box>
+            </li>
+          )}
+          renderInput={(params) => (
+            <TextField {...params} size="small" fullWidth required={!!f.required}
+              label={f.label} helperText="Type to match an existing client and auto-fill their details"
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
+          )} />
+      );
+    }
     if (f.dropdown && dropdowns[f.name]) return renderDropdown(f, fields[f.name], f.name === 'insurance_provider' ? handleProviderChange : set);
     if (f.date) return (
       <DatePicker key={f.name} label={f.label} value={dates[f.name]} onChange={val => handleDate(f.name, val)}

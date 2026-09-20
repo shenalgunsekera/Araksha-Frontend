@@ -40,6 +40,7 @@ import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import PostAddOutlinedIcon from '@mui/icons-material/PostAddOutlined';
+import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import { buildClaimsCsv, buildClaimsTemplate, parseClaimsCsv, matchClaimDoc } from '../utils/claimsIo';
 
 const BRAND_PREFIX = 'araksha';
@@ -85,12 +86,40 @@ const TRACKER_STEPS = [
 const YESNO = ['Yes', 'No'];
 const allowsUpload = (v) => !!v && v !== 'No' && v !== 'Pending';
 
+// Derive the claim status from how far the process tracker has progressed, so
+// the status chip keeps pace with the documents / steps completed.
+const isPos = (v) => !!v && v !== 'No' && v !== 'Pending';
+function deriveClaimStatus(tracker = {}) {
+  const t = (k) => tracker[k]?.value;
+  if (isPos(t('payment_received')) || isPos(t('claim_closed')) || isPos(t('receipt_issued'))) return 'Settled';
+  if (isPos(t('payment_released')) || isPos(t('customer_acceptance')) || isPos(t('final_offer_received')) || isPos(t('offer_received'))) return 'Approved';
+  if (isPos(t('surveyor_assigned')) || isPos(t('inspection_completed')) || isPos(t('documents_received')) ||
+      isPos(t('documents_verified')) || isPos(t('documents_submitted_insurer')) ||
+      t('claim_under_assessment') === 'In Progress' || t('claim_under_assessment') === 'Completed') return 'Investigating';
+  if (isPos(t('claim_intimated')) || isPos(t('claim_number_created')) || isPos(t('documents_requested'))) return 'Under Review';
+  return 'Filed';
+}
+
 function ClaimProcessTracker({ value, onChange, claimId, brandPrefix, accent }) {
   const [busy, setBusy] = useState('');
+  const [noteDrafts, setNoteDrafts] = useState({});
   const tracker = value || {};
 
   const setValue = (key, v) =>
     onChange({ ...tracker, [key]: { ...(tracker[key] || {}), value: v } });
+
+  const commitNote = (key, v) =>
+    onChange({ ...tracker, [key]: { ...(tracker[key] || {}), note: v } });
+
+  const addLink = (key) => {
+    const raw = (window.prompt('Paste a video or document link (YouTube, Drive, etc.)') || '').trim();
+    if (!raw) return;
+    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    onChange({ ...tracker, [key]: { ...(tracker[key] || {}), links: [...(tracker[key]?.links || []), { url }] } });
+  };
+
+  const removeLink = (key, idx) =>
+    onChange({ ...tracker, [key]: { ...(tracker[key] || {}), links: (tracker[key]?.links || []).filter((_, i) => i !== idx) } });
 
   const addFiles = async (key, fileList) => {
     const files = Array.from(fileList || []);
@@ -123,6 +152,7 @@ function ClaimProcessTracker({ value, onChange, claimId, brandPrefix, accent }) 
           const opts = step.options || YESNO;
           const showUp = allowsUpload(st.value);
           const docs = st.docs || [];
+          const links = st.links || [];
           return (
             <Box key={step.key} sx={{ p: 1.1, borderRadius: '10px',
                     border: '1px solid rgba(0,0,0,0.06)', bgcolor: showUp ? `${accent}0D` : 'transparent' }}>
@@ -146,16 +176,36 @@ function ClaimProcessTracker({ value, onChange, claimId, brandPrefix, accent }) 
                       onChange={e => { addFiles(step.key, e.target.files); e.target.value = ''; }} />
                   </Button>
                 )}
+                {showUp && (
+                  <Button size="small" variant="outlined" onClick={() => addLink(step.key)}
+                    startIcon={<LinkOutlinedIcon sx={{ fontSize: 15 }} />}
+                    sx={{ fontSize: 11, borderColor: `${accent}55`, color: accent, whiteSpace: 'nowrap' }}>
+                    Add link
+                  </Button>
+                )}
               </Box>
-              {docs.length > 0 && (
+              {(docs.length > 0 || links.length > 0) && (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8, mt: 1 }}>
                   {docs.map((d, di) => (
-                    <Chip key={di} size="small" icon={<DescriptionOutlinedIcon sx={{ fontSize: 14 }} />}
+                    <Chip key={'d' + di} size="small" icon={<DescriptionOutlinedIcon sx={{ fontSize: 14 }} />}
                       label={d.name || `File ${di + 1}`}
                       onClick={() => openFile(d.url)} onDelete={() => removeDoc(step.key, di)}
                       sx={{ fontSize: 11, maxWidth: 220, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }} />
                   ))}
+                  {links.map((l, li) => (
+                    <Chip key={'l' + li} size="small" icon={<LinkOutlinedIcon sx={{ fontSize: 14 }} />}
+                      label={l.name || l.url.replace(/^https?:\/\//, '').slice(0, 34)}
+                      onClick={() => window.open(l.url, '_blank', 'noopener')} onDelete={() => removeLink(step.key, li)}
+                      sx={{ fontSize: 11, maxWidth: 220, bgcolor: `${accent}12`, color: accent, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }} />
+                  ))}
                 </Box>
+              )}
+              {showUp && (
+                <TextField size="small" fullWidth multiline placeholder="Notes for this step (optional)…"
+                  value={noteDrafts[step.key] ?? (st.note || '')}
+                  onChange={e => setNoteDrafts(d => ({ ...d, [step.key]: e.target.value }))}
+                  onBlur={e => commitNote(step.key, e.target.value)}
+                  sx={{ mt: 1, '& .MuiOutlinedInput-root': { fontSize: 12, borderRadius: '8px' } }} />
               )}
             </Box>
           );
@@ -201,7 +251,16 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
   // Tracker edits on the card persist to Firestore immediately.
   const persistTracker = async (next) => {
     setTracker(next);
-    try { await updateDoc(doc(db, 'claims', claim.id), { process_tracker: next, updated_at: serverTimestamp() }); }
+    const derived = deriveClaimStatus(next);
+    const patch = { process_tracker: next, updated_at: serverTimestamp() };
+    // Auto-advance the status to match tracker progress. Rejected is a manual
+    // state (there is no tracker step for it), so never override it automatically.
+    if (derived && derived !== status && status !== 'Rejected') {
+      patch.status = derived;
+      setStatus(derived);
+      onUpdate?.(claim.id, { status: derived });
+    }
+    try { await updateDoc(doc(db, 'claims', claim.id), patch); }
     catch (_) { /* ignore */ }
   };
 
@@ -241,9 +300,16 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
               {claim.client_name} · {claim.policy_no} · Filed: {filed}
             </Typography>
           </Box>
-          <Typography sx={{ fontWeight:800, fontSize:14, color:'#255EAB', flexShrink:0 }}>
-            {claim.loss_amount ? `LKR ${Number(claim.loss_amount).toLocaleString()}` : '—'}
-          </Typography>
+          <Box sx={{ textAlign:'right', flexShrink:0, lineHeight:1.25 }}>
+            <Typography sx={{ fontSize:9.5, fontWeight:800, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:0.4 }}>Est. Loss</Typography>
+            <Typography sx={{ fontWeight:800, fontSize:14, color:'#255EAB' }}>
+              {claim.loss_amount ? `LKR ${Number(claim.loss_amount).toLocaleString()}` : '—'}
+            </Typography>
+            <Typography sx={{ fontSize:9.5, fontWeight:800, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:0.4, mt:0.4 }}>Settled</Typography>
+            <Typography sx={{ fontWeight:800, fontSize:13.5, color:'#059669' }}>
+              {claim.settlement_amount ? `LKR ${Number(claim.settlement_amount).toLocaleString()}` : '—'}
+            </Typography>
+          </Box>
           {open ? <ExpandLessIcon sx={{ color:'#9CA3AF' }} /> : <ExpandMoreIcon sx={{ color:'#9CA3AF' }} />}
         </Box>
         <Collapse in={open} timeout={220} unmountOnExit>
