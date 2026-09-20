@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  collection, getDocs, deleteDoc, doc, writeBatch, updateDoc
+  collection, getDocs, deleteDoc, doc, writeBatch, updateDoc, increment, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { confirmTypedDelete } from '../utils/confirmDelete';
@@ -349,6 +349,7 @@ const TableSection = () => {
   const [loading,      setLoading]      = useState(true);
   const [addOpen,      setAddOpen]      = useState(false);
   const [prefillData,  setPrefillData]  = useState({});
+  const [pendingRenewalRoot, setPendingRenewalRoot] = useState(null);
   const [detailClient, setDetailClient] = useState(null);
   const [editClient,   setEditClient]   = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -943,12 +944,20 @@ const TableSection = () => {
       <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="md" fullWidth
         PaperProps={{ sx: { maxHeight: '92vh' } }}>
         <DialogTitle>
-          {Object.keys(prefillData).length > 0 ? 'New Client — Pre-filled from Quote' : 'Add New Client'}
+          {prefillData.new_renewal === 'Renewal' ? 'New Policy — Renewal'
+            : Object.keys(prefillData).length > 0 ? 'New Client — Pre-filled from Quote' : 'Add New Client'}
         </DialogTitle>
         <DialogContent sx={{ p: 0 }}>
           <AddClientForm
-            onSuccess={() => { handleAddClient(); setPrefillData({}); }}
-            onCancel={() => { setAddOpen(false); setPrefillData({}); }}
+            onSuccess={async () => {
+              // A renewal was just created — bump the original policy's renewal count.
+              if (pendingRenewalRoot) {
+                try { await updateDoc(doc(db, 'clients', pendingRenewalRoot), { renewal_count: increment(1), updated_at: serverTimestamp() }); } catch (_) { /* ignore */ }
+                setPendingRenewalRoot(null);
+              }
+              handleAddClient(); setPrefillData({});
+            }}
+            onCancel={() => { setAddOpen(false); setPrefillData({}); setPendingRenewalRoot(null); }}
             initialData={prefillData}
           />
         </DialogContent>
@@ -964,6 +973,12 @@ const TableSection = () => {
               isEdit
               onSuccess={handleEditClient}
               onCancel={() => setEditClient(null)}
+              onRenew={(renewalData) => {
+                setEditClient(null);
+                setPrefillData(renewalData);
+                setPendingRenewalRoot(renewalData.root_policy_id || null);
+                setAddOpen(true);
+              }}
             />
           )}
         </DialogContent>

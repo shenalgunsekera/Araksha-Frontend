@@ -77,10 +77,11 @@ const CHART_COLORS = ['#255EAB','#6366f1','#10B981','#f59e0b','#0ea5e9','#8b5cf6
 const uwType = (f) => (f.type === 'number' || f.type === 'currency') ? 'number' : (f.date ? 'date' : 'string');
 // keys that exist on a client doc but aren't editable form fields
 const CLIENT_SYSTEM_FIELDS = [
-  { key: 'created_at',  label: 'Date Added',  type: 'date'   },
-  { key: 'insurer',     label: 'Insurer',     type: 'string' },
-  { key: 'main_class',  label: 'Main Class',  type: 'string' },
-  { key: 'status',      label: 'Status',      type: 'string' },
+  { key: 'created_at',    label: 'Date Added',      type: 'date'   },
+  { key: 'insurer',       label: 'Insurer',         type: 'string' },
+  { key: 'main_class',    label: 'Main Class',      type: 'string' },
+  { key: 'status',        label: 'Status',          type: 'string' },
+  { key: 'renewal_count', label: 'Renewals',        type: 'number' },
 ];
 // Base = every underwriting form field (so the report can use ALL of them) + system fields.
 // Excludes derived/non-stored keys (date_added becomes created_at; year/month are derived).

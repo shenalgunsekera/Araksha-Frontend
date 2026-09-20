@@ -377,7 +377,7 @@ function NumericField({ value, onChange, readOnly, ...props }) {
 }
 
 /* ══════════════════════════════ MAIN FORM ═══════════════════════════════ */
-const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }) => {
+const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, onRenew }) => {
   const { user, userProfile } = useAuth();
   const isPrivileged = userProfile?.role === 'admin' || userProfile?.role === 'manager';
 
@@ -806,6 +806,9 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
         ...docUrls,
         endorsements,    // recorded policy endorsements (with per-endorsement docs)
         product_key: productKey || '',
+        // Renewal chain linkage — carried through from a renewal prefill / prior record
+        ...(initialData.renewal_of ? { renewal_of: initialData.renewal_of } : {}),
+        ...(initialData.root_policy_id ? { root_policy_id: initialData.root_policy_id } : {}),
       };
       delete payload.date_added;
       delete payload.policy_year;   // derived — store only for display
@@ -838,6 +841,27 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
     }
     setSaving(false);
   };
+
+  /* ── Renewal — build a pre-filled copy of this policy as a new "Renewal"
+     record, linked to its parent and the original (root) policy. The parent
+     dialog opens it as a new client and bumps the root's renewal count on save. */
+  const buildRenewal = () => {
+    const datePayload = {};
+    Object.entries(dates).forEach(([k, v]) => {
+      if (k === 'date_added') return;
+      if (v && !isNaN(v)) datePayload[k] = v.toISOString().split('T')[0];
+    });
+    const root = initialData.root_policy_id || initialData.id || '';
+    return {
+      ...riskValues, ...fields, ...datePayload,
+      product_key: productKey || initialData.product_key || '',
+      new_renewal: 'Renewal',
+      renewal_of: initialData.id || '',
+      root_policy_id: root,
+    };
+  };
+  const renewalCount = Number(initialData.renewal_count) || 0;
+  const isRenewal = !!initialData.renewal_of || fields.new_renewal === 'Renewal';
 
   /* ── Insurance Provider dropdown — base list + user-added companies saved to
      Firestore ('insurance_providers') so they persist in the dropdown for
@@ -1037,6 +1061,31 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false }
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Box component="form" onSubmit={handleSubmit} sx={{ px: 3, py: 2.5, overflow: 'auto' }}>
+
+        {/* ── Renewal banner (edit mode) ───────────────────── */}
+        {isEdit && (
+          <Box sx={{ display:'flex', alignItems:'center', gap:1.5, flexWrap:'wrap', mb:2, p:1.5, borderRadius:'12px',
+                     border:'1px solid rgba(37,94,171,0.2)', bgcolor:'rgba(37,94,171,0.04)' }}>
+            <Box sx={{ flex:1, minWidth:180 }}>
+              <Typography sx={{ fontSize:13, fontWeight:700, color:'#255EAB' }}>
+                {isRenewal ? 'Renewal policy' : 'Original policy'}
+                {renewalCount > 0 && (
+                  <Box component="span" sx={{ ml:1, px:1, py:0.2, borderRadius:'6px', bgcolor:'rgba(37,94,171,0.12)', fontSize:11.5 }}>
+                    {renewalCount} renewal{renewalCount === 1 ? '' : 's'}
+                  </Box>
+                )}
+              </Typography>
+              <Typography sx={{ fontSize:11.5, color:'#9CA3AF', mt:0.2 }}>
+                Create a renewal — a pre-filled copy you can adjust; the original policy's renewal count updates on save.
+              </Typography>
+            </Box>
+            <Button variant="outlined" size="small" onClick={() => onRenew?.(buildRenewal())}
+              sx={{ textTransform:'none', fontWeight:700, borderColor:'#255EAB', color:'#255EAB',
+                    '&:hover':{ borderColor:'#0A1A3E', bgcolor:'rgba(37,94,171,0.06)' } }}>
+              Create Renewal
+            </Button>
+          </Box>
+        )}
 
         {/* ── Introducer ───────────────────────────────────── */}
         <SectionHeader title="Introducer" />
