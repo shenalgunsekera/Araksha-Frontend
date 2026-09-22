@@ -493,10 +493,8 @@ const TableSection = () => {
   /* Available years derived from actual client data */
   const availableYears = useMemo(() => {
     const years = new Set();
-    clients.forEach(c => {
-      const d = c.created_at?.toDate ? c.created_at.toDate() : c.created_at ? new Date(c.created_at) : null;
-      if (d && !isNaN(d)) years.add(d.getFullYear());
-    });
+    const add = (v) => { const d = v ? new Date(v) : null; if (d && !isNaN(d)) years.add(d.getFullYear()); };
+    clients.forEach(c => { add(c.policy_period_from); add(c.policy_period_to); });
     return [...years].sort((a, b) => b - a);
   }, [clients]);
 
@@ -510,15 +508,17 @@ const TableSection = () => {
     let list = clients;
     if (filterType !== 'all') list = list.filter(c => normCustType(c.customer_type) === filterType);
 
-    // Date Added filters
+    // Policy period filters — match if the policy's From OR To date falls in the
+    // selected year / month (filters by the policy period, not when it was added).
     if (filterYear !== 'all' || filterMonth !== 'all') {
-      list = list.filter(c => {
-        const d = c.created_at?.toDate ? c.created_at.toDate() : c.created_at ? new Date(c.created_at) : null;
+      const inSel = (v) => {
+        const d = v ? new Date(v) : null;
         if (!d || isNaN(d)) return false;
-        if (filterYear  !== 'all' && d.getFullYear()  !== Number(filterYear))  return false;
-        if (filterMonth !== 'all' && d.getMonth()     !== Number(filterMonth)) return false;
+        if (filterYear  !== 'all' && d.getFullYear() !== Number(filterYear))  return false;
+        if (filterMonth !== 'all' && d.getMonth()    !== Number(filterMonth)) return false;
         return true;
-      });
+      };
+      list = list.filter(c => inSel(c.policy_period_from) || inSel(c.policy_period_to));
     }
 
     if (searchQuery) {
@@ -699,9 +699,9 @@ const TableSection = () => {
             ))}
           </Stack>
 
-          {/* Date Added filter row */}
+          {/* Policy period filter row (by policy From / To dates) */}
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-            <Typography sx={{ fontSize: 11.5, color: '#9CA3AF', fontWeight: 600 }}>Date Added:</Typography>
+            <Typography sx={{ fontSize: 11.5, color: '#9CA3AF', fontWeight: 600 }}>Policy Period:</Typography>
             <Select size="small" value={filterYear} onChange={e => { setFilterYear(e.target.value); setPage(1); }}
               sx={{ fontSize: 12, height: 30, minWidth: 90, '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(56,163,224,0.25)' } }}>
               <MenuItem value="all" sx={{ fontSize: 12 }}>All Years</MenuItem>
