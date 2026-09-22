@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { collection, addDoc, doc, updateDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { uploadFile as uploadToCloudinary, openFile } from '../storage';
 import { logActivity } from '../utils/workSession';
 import { useAuth } from '../App';
 import { PRODUCTS } from '../config/products';
+import { rateFor } from '../utils/commissionRates';
 import { evaluateAutoCalc, describeAutoCalc } from '../utils/autoCalc';
 
 import Box from '@mui/material/Box';
@@ -34,6 +35,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 
@@ -121,17 +123,11 @@ const dropdowns = {
   claim_paid: ['Yes', 'No', 'Partial', 'Repudiated'],
 };
 
-/* ── Commission rate table (by Main Class) ──────────────────────────────────
-   Standard commission = basic premium × basic rate + SRCC × 7.5% + TC × 7.5%.
-   For a "Special" commission, an additional special rate (+/-) is applied to the
-   BASIC premium only; SRCC and TC rates remain fixed.                          */
-const COMMISSION_BASIC_RATES = {
-  Motor: 20, Fire: 20, Marine: 15, Health: 20,
-  Miscellaneous: 20, Individual: 20, Group: 20, Other: 20,
-};
-// SRCC and TC are 7.5% for most classes but 5% for MOTOR policies.
-const srccRateFor = (mainClass) => (mainClass === 'Motor' ? 5 : 7.5);
-const tcRateFor   = (mainClass) => (mainClass === 'Motor' ? 5 : 7.5);
+/* ── Commission ─────────────────────────────────────────────────────────────
+   Standard commission = premiums × the rate in force at the policy start date,
+   resolved from the admin Commissions tab (settings/commission_rates) with a
+   per-class fallback — see utils/commissionRates. A "Special" commission adds a
+   single flat Special Commission amount on top of the Basic/SRCC/TC.           */
 const num = (v) => parseFloat(String(v ?? '').replace(/,/g, '')) || 0;
 const roundMoney = (n) => (Number.isFinite(n) && n !== 0 ? String(Math.round(n * 100) / 100) : '');
 
@@ -148,7 +144,7 @@ export const textFields = [
   { label: 'Product',            name: 'product',            section: 'Insurance Company', dropdown: true, required: true },
   { label: 'Insurance Provider', name: 'insurance_provider', section: 'Insurance Company', dropdown: true, required: true },
   { label: 'Branch',             name: 'branch',             section: 'Insurance Company', dropdown: true },
-  { label: 'New / Renewal',      name: 'new_renewal',        section: 'Insurance Company', dropdown: true },
+  { label: 'New / Renewal',      name: 'new_renewal',        section: 'Introducer', dropdown: true },
   // Proposer Details
   { label: 'Customer Type',      name: 'customer_type',      section: 'Proposer Details', dropdown: true, required: true },
   { label: 'Client Name',        name: 'client_name',        section: 'Proposer Details', required: true },
@@ -209,11 +205,10 @@ export const textFields = [
   // Commission
   { label: 'Commission Type',    name: 'commission_type',    section: 'Commission', dropdown: true },
   { label: 'Basic Commission %', name: 'commission_pct',     section: 'Commission', type: 'number' },
-  { label: 'Special Rate (+/- %)', name: 'commission_special_rate', section: 'Commission', type: 'number' },
+  { label: 'Special Commission', name: 'commission_special', section: 'Commission', type: 'number' },
   { label: 'Commission Basic',   name: 'commission_basic',   section: 'Commission', type: 'number' },
   { label: 'Commission SRCC',    name: 'commission_srcc',    section: 'Commission', type: 'number' },
   { label: 'Commission TC',      name: 'commission_tc',      section: 'Commission', type: 'number' },
-  { label: 'Special Adjustment', name: 'commission_special_amount', section: 'Commission', type: 'number' },
   { label: 'Total Commission',   name: 'commission_total',   section: 'Commission', type: 'number' },
   { label: 'Commission Method',  name: 'commission_paid_method', section: 'Commission', dropdown: true },
   { label: 'Commission Receive Date', name: 'commission_receive_date', section: 'Commission', date: true },
@@ -413,6 +408,9 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
     // Marine policies default to New when the field is blank (existing records
     // predate this field); every other class is left blank to be set manually.
     if (!obj.new_renewal && (obj.main_class === 'Marine' || /marine/i.test(obj.product || ''))) obj.new_renewal = 'New';
+    // Legacy Special records used commission_special_amount (basic × +/- rate);
+    // fold it into the new single Special Commission so nothing is lost on edit.
+    if (!obj.commission_special && initialData.commission_special_amount) obj.commission_special = String(initialData.commission_special_amount);
     return obj;
   });
 
@@ -478,48 +476,51 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
     }));
   }, [dates.policy_period_from, dates.payment_date, fields.payment_status]);
 
-  /* Auto-calculate Standard / Special commission from the rate table.
-     Runs only when a commission type is selected; manual edits are left alone
-     when no type is set. SRCC and TC rates are fixed; Special adds a +/- rate
-     applied to the basic premium only. */
-  const autoCommission = fields.commission_type === 'Standard' || fields.commission_type === 'Special';
+  /* ── Commission rate schedules (admin-managed, per product / date range) ── */
+  const [commissionSchedules, setCommissionSchedules] = useState({});
+  useEffect(() => {
+    let alive = true;
+    getDoc(doc(db, 'settings', 'commission_rates'))
+      .then(snap => { if (alive && snap.exists()) setCommissionSchedules(snap.data().products || {}); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  /* Standard commission auto-calculates from the admin rate table for the
+     product, using the rate whose date range contains the policy START date.
+     Special is entered by hand (a single Special Commission plus any manual
+     Basic/SRCC/TC), so it is never auto-derived. */
+  const autoCommission = fields.commission_type === 'Standard';
   useEffect(() => {
     if (!autoCommission) return;
-    const basicRate = COMMISSION_BASIC_RATES[fields.main_class] ?? 20;
-    const cb = num(fields.basic_premium) * basicRate / 100;
-    const cs = num(fields.srcc_premium)  * srccRateFor(fields.main_class) / 100;
-    const ct = num(fields.tc_premium)    * tcRateFor(fields.main_class)   / 100;
-    const specialAmt = fields.commission_type === 'Special'
-      ? num(fields.basic_premium) * num(fields.commission_special_rate) / 100
-      : 0;
+    const rate = rateFor(commissionSchedules, fields.product, fields.main_class, dates.policy_period_from);
+    const cb = num(fields.basic_premium) * rate.basic / 100;
+    const cs = num(fields.srcc_premium)  * rate.srcc  / 100;
+    const ct = num(fields.tc_premium)    * rate.tc    / 100;
     setFields(f => ({
       ...f,
-      commission_pct:            String(basicRate),
-      commission_basic:          roundMoney(cb),
-      commission_srcc:           roundMoney(cs),
-      commission_tc:             roundMoney(ct),
-      commission_special_amount: fields.commission_type === 'Special' ? roundMoney(specialAmt) : '',
+      commission_pct:   String(rate.basic),
+      commission_basic: roundMoney(cb),
+      commission_srcc:  roundMoney(cs),
+      commission_tc:    roundMoney(ct),
     }));
-  }, [autoCommission, fields.commission_type, fields.main_class, fields.basic_premium,
-      fields.srcc_premium, fields.tc_premium, fields.commission_special_rate]);
+  }, [autoCommission, fields.commission_type, fields.main_class, fields.product, fields.basic_premium,
+      fields.srcc_premium, fields.tc_premium, dates.policy_period_from, commissionSchedules]);
 
   useEffect(() => {
-    const total = num(fields.commission_basic) + num(fields.commission_srcc)
-                + num(fields.commission_tc) + num(fields.commission_special_amount);
+    // Total = the standard breakdown, plus the Special Commission for a Special type.
+    const total = num(fields.commission_basic) + num(fields.commission_srcc) + num(fields.commission_tc)
+                + (fields.commission_type === 'Special' ? num(fields.commission_special) : 0);
     setFields(f => ({ ...f, commission_total: total !== 0 ? String(Math.round(total * 100) / 100) : '' }));
-  }, [fields.commission_basic, fields.commission_srcc, fields.commission_tc, fields.commission_special_amount]);
+  }, [fields.commission_basic, fields.commission_srcc, fields.commission_tc, fields.commission_special, fields.commission_type]);
 
   /* ── Endorsement helpers ──────────────────────────────────────────────────
      Every field is a +/- CHANGE applied to the policy's current value. Commission
      is NOT entered — it recalculates from the new premiums using the same rate
      table + commission type; the endorsement records the resulting commission change. */
   const commissionOf = (basic, srcc, tc) => {
-    const basicRate = COMMISSION_BASIC_RATES[fields.main_class] ?? 20;
-    const cb = basic * basicRate / 100;
-    const cs = srcc  * srccRateFor(fields.main_class) / 100;
-    const ct = tc    * tcRateFor(fields.main_class)   / 100;
-    const special = fields.commission_type === 'Special' ? basic * num(fields.commission_special_rate) / 100 : 0;
-    return cb + cs + ct + special;
+    const rate = rateFor(commissionSchedules, fields.product, fields.main_class, dates.policy_period_from);
+    return basic * rate.basic / 100 + srcc * rate.srcc / 100 + tc * rate.tc / 100;
   };
   const endoCommissionChange = (draft) => {
     const oldC = commissionOf(num(fields.basic_premium), num(fields.srcc_premium), num(fields.tc_premium));
@@ -773,8 +774,8 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
     if (fields.commission_type === 'Standard' && !num(fields.commission_total)) {
       setError('Total Commission is required for a Standard commission'); return;
     }
-    if (fields.commission_type === 'Special' && !num(fields.commission_special_amount) && !num(fields.commission_special_rate)) {
-      setError('Special commission (Special Rate or Special Adjustment) is required for a Special commission'); return;
+    if (fields.commission_type === 'Special' && !num(fields.commission_special)) {
+      setError('Special Commission is required for a Special commission'); return;
     }
     setSaving(true);
     try {
@@ -860,8 +861,6 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
       root_policy_id: root,
     };
   };
-  const renewalCount = Number(initialData.renewal_count) || 0;
-  const isRenewal = !!initialData.renewal_of || fields.new_renewal === 'Renewal';
 
   /* ── Insurance Provider dropdown — base list + user-added companies saved to
      Firestore ('insurance_providers') so they persist in the dropdown for
@@ -1062,33 +1061,17 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Box component="form" onSubmit={handleSubmit} sx={{ px: 3, py: 2.5, overflow: 'auto' }}>
 
-        {/* ── Renewal banner (edit mode) ───────────────────── */}
-        {isEdit && (
-          <Box sx={{ display:'flex', alignItems:'center', gap:1.5, flexWrap:'wrap', mb:2, p:1.5, borderRadius:'12px',
-                     border:'1px solid rgba(37,94,171,0.2)', bgcolor:'rgba(37,94,171,0.04)' }}>
-            <Box sx={{ flex:1, minWidth:180 }}>
-              <Typography sx={{ fontSize:13, fontWeight:700, color:'#255EAB' }}>
-                {isRenewal ? 'Renewal policy' : 'Original policy'}
-                {renewalCount > 0 && (
-                  <Box component="span" sx={{ ml:1, px:1, py:0.2, borderRadius:'6px', bgcolor:'rgba(37,94,171,0.12)', fontSize:11.5 }}>
-                    {renewalCount} renewal{renewalCount === 1 ? '' : 's'}
-                  </Box>
-                )}
-              </Typography>
-              <Typography sx={{ fontSize:11.5, color:'#9CA3AF', mt:0.2 }}>
-                Create a renewal — a pre-filled copy you can adjust; the original policy's renewal count updates on save.
-              </Typography>
-            </Box>
-            <Button variant="outlined" size="small" onClick={() => onRenew?.(buildRenewal())}
-              sx={{ textTransform:'none', fontWeight:700, borderColor:'#255EAB', color:'#255EAB',
-                    '&:hover':{ borderColor:'#0A1A3E', bgcolor:'rgba(37,94,171,0.06)' } }}>
+        {/* ── Introducer ───────────────────────────────────── */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+          <SectionHeader title="Introducer" />
+          {isEdit && (
+            <Button variant="outlined" size="small" startIcon={<AutorenewIcon sx={{ fontSize: 18 }} />}
+              onClick={() => onRenew?.(buildRenewal())}
+              sx={{ textTransform: 'none', borderRadius: '10px', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>
               Create Renewal
             </Button>
-          </Box>
-        )}
-
-        {/* ── Introducer ───────────────────────────────────── */}
-        <SectionHeader title="Introducer" />
+          )}
+        </Box>
         <Grid container spacing={2} sx={{ mb: 2.5 }}>
           <Grid item xs={12} sm={6} md={4}>
             <TextField label="Araksha IB File No." value={fields.araksha_ib_file_no}
@@ -1107,6 +1090,9 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
               onChange={e => set('introducer_code', e.target.value)}
               fullWidth size="small"
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+            {renderStaticField(textFields.find(f => f.name === 'new_renewal'))}
           </Grid>
         </Grid>
 
@@ -1324,23 +1310,32 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
 
         {/* ── Commission ───────────────────────────────────── */}
         <SectionHeader title="Commission" />
-        {autoCommission && (
-          <Box sx={{ mb: 1.5, px: 1.5, py: 1, borderRadius: '8px', bgcolor: 'rgba(236,72,153,0.06)', border: '1px solid rgba(236,72,153,0.18)' }}>
-            <Typography sx={{ fontSize: 12, color: '#9d174d', fontWeight: 600 }}>
-              {fields.commission_type === 'Special'
-                ? `Auto-calculated: Standard (${fields.main_class || '—'} basic ${COMMISSION_BASIC_RATES[fields.main_class] ?? 20}%, SRCC ${srccRateFor(fields.main_class)}%, TC ${tcRateFor(fields.main_class)}%) with the Special Rate applied to the basic premium.`
-                : `Auto-calculated from the rate table: ${fields.main_class || '—'} basic ${COMMISSION_BASIC_RATES[fields.main_class] ?? 20}%, SRCC ${srccRateFor(fields.main_class)}%, TC ${tcRateFor(fields.main_class)}% (× the entered premiums).`}
+        {autoCommission && (() => {
+          const rate = rateFor(commissionSchedules, fields.product, fields.main_class, dates.policy_period_from);
+          return (
+            <Box sx={{ mb: 1.5, px: 1.5, py: 1, borderRadius: '8px', bgcolor: 'rgba(236,72,153,0.06)', border: '1px solid rgba(236,72,153,0.18)' }}>
+              <Typography sx={{ fontSize: 12, color: '#9d174d', fontWeight: 600 }}>
+                Auto-calculated for {fields.product || 'this product'} using the rate that applies on the policy start date — Basic {rate.basic}%, SRCC {rate.srcc}%, TC {rate.tc}% (× the entered premiums). Manage periods in Admin → Commissions.
+              </Typography>
+            </Box>
+          );
+        })()}
+        {fields.commission_type === 'Special' && (
+          <Box sx={{ mb: 1.5, px: 1.5, py: 1, borderRadius: '8px', bgcolor: 'rgba(37,94,171,0.06)', border: '1px solid rgba(37,94,171,0.18)' }}>
+            <Typography sx={{ fontSize: 12, color: '#255EAB', fontWeight: 600 }}>
+              Enter the Special Commission by hand. Any Basic / SRCC / TC you fill in are added on top — Total = Special + Basic + SRCC + TC.
             </Typography>
           </Box>
         )}
         <Grid container spacing={2} sx={{ mb: 2.5 }}>
           {textFields.filter(f => f.section === 'Commission')
-            // Special-only fields hidden unless a Special commission is selected
-            .filter(f => (f.name === 'commission_special_rate' || f.name === 'commission_special_amount')
-              ? fields.commission_type === 'Special' : true)
+            // The single Special Commission shows only for a Special type.
+            .filter(f => f.name === 'commission_special' ? fields.commission_type === 'Special' : true)
             .map(f => {
-              // When a commission type is chosen the breakdown is auto-derived, so lock those inputs
-              const locked = autoCommission && ['commission_basic', 'commission_srcc', 'commission_tc'].includes(f.name);
+              // Standard derives Basic/SRCC/TC from the rate table (locked). Special
+              // leaves them manual so they can be entered by hand.
+              const locked = fields.commission_type === 'Standard'
+                && ['commission_basic', 'commission_srcc', 'commission_tc', 'commission_pct'].includes(f.name);
               return (
                 <Grid item xs={12} sm={6} md={4} key={f.name}>
                   {renderStaticField(locked ? { ...f, readOnly: true } : f)}

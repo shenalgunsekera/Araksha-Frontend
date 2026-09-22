@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  collection, getDocs, deleteDoc, doc, writeBatch, updateDoc, increment, serverTimestamp
+  collection, getDocs, getDoc, deleteDoc, doc, writeBatch, updateDoc, increment, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { confirmTypedDelete } from '../utils/confirmDelete';
@@ -11,6 +11,7 @@ import AddClientForm, { textFields as UW_FIELDS } from './AddClientForm';
 import ClientDetailsModal from './ClientDetailsModal';
 import { exportHeader, normaliseImportRow } from '../utils/csvHeaders';
 import { liveOsDays } from '../utils/osDays';
+import { rateFor } from '../utils/commissionRates';
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -616,6 +617,11 @@ const TableSection = () => {
           setCsvImporting(false); return;
         }
         let imported = 0, errors = [];
+        // Commission rate schedules (per-product, per-date-range) from the admin
+        // Commissions tab, so imported rows auto-calc with the rate in force at
+        // each policy's start date — matching the underwriting form.
+        let schedules = {};
+        try { const rSnap = await getDoc(doc(db, 'settings', 'commission_rates')); if (rSnap.exists()) schedules = rSnap.data().products || {}; } catch { /* fall back to defaults */ }
         // Firestore batches are capped at 500 writes — commit in chunks so large
         // registers (hundreds/thousands of rows) import without hitting the limit.
         const CHUNK = 450;
@@ -633,15 +639,14 @@ const TableSection = () => {
             // record shows complete totals without anyone re-saving it.
             const n = (v) => parseFloat(String(v ?? '').replace(/,/g, '')) || 0;
             // Auto-calculate commission the same way the underwriting form does when the
-            // CSV doesn't supply it: basic × class rate, SRCC/TC × 5% (Motor) or 7.5%.
-            const BASIC_RATES = { Motor:20, Fire:20, Marine:15, Health:20, Miscellaneous:20, Individual:20, Group:20, Other:20 };
-            const basicRate = BASIC_RATES[clean.main_class] != null ? BASIC_RATES[clean.main_class] : 20;
-            const stRate = clean.main_class === 'Motor' ? 5 : 7.5;
-            if (!clean.commission_pct)                             clean.commission_pct   = String(basicRate);
-            if (!clean.commission_basic && n(clean.basic_premium)) clean.commission_basic = String(Math.round(n(clean.basic_premium) * basicRate) / 100);
-            if (!clean.commission_srcc  && n(clean.srcc_premium))  clean.commission_srcc  = String(Math.round(n(clean.srcc_premium)  * stRate)   / 100);
-            if (!clean.commission_tc    && n(clean.tc_premium))    clean.commission_tc    = String(Math.round(n(clean.tc_premium)    * stRate)   / 100);
-            const commTotal = n(clean.commission_basic) + n(clean.commission_srcc) + n(clean.commission_tc) + n(clean.commission_special_amount);
+            // CSV doesn't supply it: premiums × the rate in force at the policy start
+            // date (from the admin Commissions tab), falling back to per-class defaults.
+            const rate = rateFor(schedules, clean.product, clean.main_class, clean.policy_period_from);
+            if (!clean.commission_pct)                             clean.commission_pct   = String(rate.basic);
+            if (!clean.commission_basic && n(clean.basic_premium)) clean.commission_basic = String(Math.round(n(clean.basic_premium) * rate.basic) / 100);
+            if (!clean.commission_srcc  && n(clean.srcc_premium))  clean.commission_srcc  = String(Math.round(n(clean.srcc_premium)  * rate.srcc)  / 100);
+            if (!clean.commission_tc    && n(clean.tc_premium))    clean.commission_tc    = String(Math.round(n(clean.tc_premium)    * rate.tc)    / 100);
+            const commTotal = n(clean.commission_basic) + n(clean.commission_srcc) + n(clean.commission_tc) + n(clean.commission_special) + n(clean.commission_special_amount);
             if (commTotal !== 0) clean.commission_total = String(Math.round(commTotal * 100) / 100);
             if (clean.policy_period_from && clean.policy_period_to && !clean.policy_days) {
               const a = new Date(clean.policy_period_from), b = new Date(clean.policy_period_to);

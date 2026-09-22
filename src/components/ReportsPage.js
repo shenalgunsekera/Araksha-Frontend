@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { collection, getDocs, query, orderBy, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { confirmTypedDelete } from '../utils/confirmDelete';
 import { liveOsDays, policyStatus } from '../utils/osDays';
@@ -892,14 +892,19 @@ const ReportsPage = () => {
 
   const loadData = useCallback(async()=>{
     setLoading(true);
-    const [cS,clS,qS]=await Promise.all([
+    const [cS,clS,qS,rateSnap]=await Promise.all([
       getDocs(query(collection(db,'clients'),orderBy('created_at','desc'))),
       getDocs(query(collection(db,'claims'), orderBy('created_at','desc'))),
       getDocs(query(collection(db,'quotes'), orderBy('created_at','desc'))),
+      getDoc(doc(db,'settings','commission_rates')),
     ]);
+    // Commission rate schedules (per-product, per-date-range) from the admin
+    // Commissions tab; passed to liveCommission so reports use the rate that was
+    // in force at each policy's start date. Falls back to per-class defaults.
+    const schedules = (rateSnap.exists() && rateSnap.data().products) || {};
     // Compute O/S Days live (counts up from policy start, 0 once paid) so reports
     // never show the stale stored snapshot or a leftover value on paid policies.
-    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, ...liveCommission(c), os_days: liveOsDays(c), policy_status: policyStatus(c), customer_type: normCustomerType(c.customer_type), new_renewal: c.new_renewal || ((c.main_class==='Marine'||/marine/i.test(c.product||''))?'New':'')}; }));
+    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, ...liveCommission(c, schedules), os_days: liveOsDays(c), policy_status: policyStatus(c), customer_type: normCustomerType(c.customer_type), new_renewal: c.new_renewal || ((c.main_class==='Marine'||/marine/i.test(c.product||''))?'New':'')}; }));
     setClaims(clS.docs.map(d=>{
       const c={id:d.id,...d.data()};
       // Surface the process-tracker richness (per-step notes, uploaded docs and

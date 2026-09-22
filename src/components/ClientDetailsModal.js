@@ -4,7 +4,7 @@ import { liveOsDays } from '../utils/osDays';
 import { liveCommission } from '../utils/commission';
 import { PRODUCTS } from '../config/products';
 import { db } from '../firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -169,6 +169,18 @@ const ClientDetailsModal = ({ client, onClose }) => {
       const map = {};
       snap.forEach(d => { map[d.id] = { ...d.data() }; });
       setCustomProducts(map);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Commission rate schedules (per-product, per-date-range) from the admin
+  // Commissions tab; passed to liveCommission so the displayed standard
+  // commission uses the rate in force at this policy's start date.
+  const [commissionSchedules, setCommissionSchedules] = useState({});
+  React.useEffect(() => {
+    let alive = true;
+    getDoc(doc(db, 'settings', 'commission_rates')).then(snap => {
+      if (alive && snap.exists()) setCommissionSchedules(snap.data().products || {});
     }).catch(() => {});
     return () => { alive = false; };
   }, []);
@@ -953,16 +965,18 @@ const ClientDetailsModal = ({ client, onClose }) => {
           </Box>
         );
       case 6: { /* Commission */
-        const lc = liveCommission(client);
+        const lc = liveCommission(client, commissionSchedules);
+        const isSpecial = client.commission_type === 'Special';
         return (
           <Grid container spacing={2.5}>
             <Grid item xs={12} sm={6} md={4}><Field label="Commission Type"         value={client.commission_type} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Basic Commission %"      value={lc.commission_pct} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="Special Rate (+/- %)"    value={client.commission_special_rate} /></Grid>
+            {isSpecial && (
+              <Grid item xs={12} sm={6} md={4}><Field label="Special Commission"    value={fmtLKR(client.commission_special || client.commission_special_amount)} /></Grid>
+            )}
             <Grid item xs={12} sm={6} md={4}><Field label="Commission Basic"        value={fmtLKR(lc.commission_basic)} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Commission SRCC"         value={fmtLKR(lc.commission_srcc)} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Commission TC"           value={fmtLKR(lc.commission_tc)} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="Special Adjustment"      value={fmtLKR(client.commission_special_amount)} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Total Commission"        value={fmtLKR(lc.commission_total)} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Commission Method"       value={client.commission_paid_method} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Receive Date"            value={client.commission_receive_date} /></Grid>
