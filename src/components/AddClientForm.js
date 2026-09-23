@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp, getDocs, arrayUnion, increment, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { uploadFile as uploadToCloudinary, openFile } from '../storage';
 import { logActivity } from '../utils/workSession';
@@ -36,6 +36,8 @@ import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 
@@ -408,9 +410,21 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
     // Marine policies default to New when the field is blank (existing records
     // predate this field); every other class is left blank to be set manually.
     if (!obj.new_renewal && (obj.main_class === 'Marine' || /marine/i.test(obj.product || ''))) obj.new_renewal = 'New';
-    // Legacy Special records used commission_special_amount (basic × +/- rate);
-    // fold it into the new single Special Commission so nothing is lost on edit.
-    if (!obj.commission_special && initialData.commission_special_amount) obj.commission_special = String(initialData.commission_special_amount);
+    // Migrate legacy Special records to the new single Special Commission field.
+    // Old Special policies stored their commission in the auto-computed Basic field
+    // (and/or the +/- special adjustment). For a Special policy that value IS the
+    // special commission, so move it into Special and clear Basic — Standard records
+    // are never touched, so their Basic commission stays exactly as-is.
+    if (obj.commission_type === 'Special' && !num(obj.commission_special)) {
+      const legacyAdj = num(initialData.commission_special_amount);
+      if (legacyAdj) {
+        obj.commission_special = String(legacyAdj);
+      } else if (num(obj.commission_basic)) {
+        obj.commission_special = obj.commission_basic;
+        obj.commission_basic = '';
+        obj.commission_pct = '';
+      }
+    }
     return obj;
   });
 
@@ -434,15 +448,42 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
   const [saving,   setSaving]   = useState(false);
   const [error,    setError]    = useState('');
 
+  // ── Payments ledger ────────────────────────────────────────────────────
+  // A policy can receive several payments. Each entry carries every payment field
+  // except Payment Status (which stays policy-level). The policy's Amount Received
+  // is the derived total of the ledger PLUS any endorsement Amount Paid (kept
+  // separate but still counted). Legacy single-payment records migrate to one row.
+  const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const freshPayment = () => ({ amount_received: '', payment_date: '', payment_method: '', cheque_slip_no: '', receipt_no: '', debit_note_no: '', debit_note_date: '' });
+  const [payments, setPayments] = useState(() => {
+    if (Array.isArray(initialData.payments) && initialData.payments.length) {
+      return initialData.payments.map(p => ({ id: p.id || genId(), ...freshPayment(), ...p }));
+    }
+    const single = {
+      amount_received: initialData.amount_received || '', payment_date: initialData.payment_date || '',
+      payment_method: initialData.payment_method || '', cheque_slip_no: initialData.cheque_slip_no || '',
+      receipt_no: initialData.receipt_no || '', debit_note_no: initialData.debit_note_no || '',
+      debit_note_date: initialData.debit_note_date || '',
+    };
+    return Object.values(single).some(v => v !== '' && v != null) ? [{ id: genId(), ...single }] : [];
+  });
+  const updatePayment = (id, key, val) => setPayments(list => list.map(p => (p.id === id ? { ...p, [key]: val } : p)));
+  const addPayment    = () => setPayments(list => [...list, { id: genId(), ...freshPayment() }]);
+  const removePayment = (id) => setPayments(list => list.filter(p => p.id !== id));
+  const paymentsTotal    = payments.reduce((a, p) => a + num(p.amount_received), 0);
+
   // ── Endorsements (edit mode) ────────────────────────────────────────────
   const [endorsements, setEndorsements] = useState(() =>
     Array.isArray(initialData.endorsements) ? initialData.endorsements : []);
   const freshDraft = () => ({
     effective_date: '', type: ENDORSEMENT_TYPES[0], description: '',
     basic_premium_change: '', srcc_premium_change: '', tc_premium_change: '',
-    total_premium_change: '', sum_insured_change: '', documents: [],
+    total_premium_change: '', sum_insured_change: '', amount_paid: '', documents: [],
   });
   const [endoDraft, setEndoDraft] = useState(() => freshDraft());
+  // Which endorsement's Amount Paid is being edited inline ({ id, value }), plus
+  // the running Amount Received update it drives.
+  const [editingPaid, setEditingPaid] = useState(null);
   const [endoError, setEndoError] = useState('');
   const [endoUploading, setEndoUploading] = useState(false);
 
@@ -574,6 +615,7 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
       total_premium_change: String(num(endoDraft.total_premium_change)),
       sum_insured_change:   String(num(endoDraft.sum_insured_change)),
       commission_change:    String(endoCommissionChange(endoDraft)),
+      amount_paid:          String(num(endoDraft.amount_paid)),
       documents: endoDraft.documents,
       created_at: new Date().toISOString(),
       created_by: userProfile?.full_name || user?.email?.split('@')[0] || 'Unknown',
@@ -581,6 +623,8 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
     setEndorsements(list => [...list, entry]);
     // Apply each +/- change to the policy's current values. Net premium follows
     // the premium changes automatically; total premium takes the manual change.
+    // The endorsement's Amount Paid is NOT written here — it's counted into the
+    // policy's total Amount Received (with the payments ledger) at render/save time.
     setFields(f => ({ ...f,
       basic_premium: String(num(f.basic_premium) + num(entry.basic_premium_change)),
       srcc_premium:  String(num(f.srcc_premium)  + num(entry.srcc_premium_change)),
@@ -593,8 +637,18 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
     setEndoError('');
   };
 
+  // Edit an existing endorsement's Amount Paid. The policy total recomputes from
+  // the ledger + all endorsement payments, so nothing else needs updating here.
+  const setEndorsementPaid = (id, raw) =>
+    setEndorsements(list => list.map(e => (e.id === id ? { ...e, amount_paid: String(num(raw)) } : e)));
+
   const deleteEndorsement = (id) =>
     setEndorsements(list => list.filter(e => e.id !== id).map((e, i) => ({ ...e, endorsement_no: i + 1 })));
+
+  // Total Amount Received = payments ledger + all endorsement Amount Paid (kept
+  // separate but both counted). This is what reports and exports read.
+  const endoPaidTotal    = endorsements.reduce((a, e) => a + num(e.amount_paid), 0);
+  const totalReceivedNum = Math.round((paymentsTotal + endoPaidTotal) * 100) / 100;
 
   /* ── custom products (Firestore) merged with built-ins ───────────────────
      Without this, a quote built on a custom product would not render any of its
@@ -811,6 +865,20 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
         ...(initialData.renewal_of ? { renewal_of: initialData.renewal_of } : {}),
         ...(initialData.root_policy_id ? { root_policy_id: initialData.root_policy_id } : {}),
       };
+      // Payments ledger — store the full list and set the policy's Amount Received to
+      // the derived total (ledger + endorsement payments). Mirror the most recent
+      // payment's details onto the top-level fields so reports / CSV / PDF that read
+      // the single payment fields keep showing a sensible value.
+      const lastPay = payments[payments.length - 1] || {};
+      payload.payments = payments;
+      payload.amount_received = totalReceivedNum ? String(totalReceivedNum) : '';
+      payload.payment_date    = lastPay.payment_date || '';
+      payload.payment_method  = lastPay.payment_method || '';
+      payload.cheque_slip_no  = lastPay.cheque_slip_no || '';
+      payload.receipt_no      = lastPay.receipt_no || '';
+      payload.debit_note_no   = lastPay.debit_note_no || '';
+      payload.debit_note_date = lastPay.debit_note_date || '';
+
       delete payload.date_added;
       delete payload.policy_year;   // derived — store only for display
       delete payload.policy_month;  // derived
@@ -824,7 +892,7 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
           ...(dateAdded ? { created_at: dateAdded } : {}),
         });
       } else {
-        await addDoc(collection(db, 'clients'), {
+        const newRef = await addDoc(collection(db, 'clients'), {
           ...payload,
           created_at:        dateAdded || serverTimestamp(),
           is_active:         true,
@@ -834,6 +902,19 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
           submitted_at:      serverTimestamp(),
           ...(initialData.source_quote_id ? { source_quote_id: initialData.source_quote_id } : {}),
         });
+        // Renewal: register this child on its parent (the original New policy) once,
+        // right here — so it can't be double-counted by the dialog and the parent
+        // always knows its renewals (for display + cascade delete).
+        const rootId = payload.root_policy_id;
+        if (rootId && rootId !== newRef.id) {
+          try {
+            await updateDoc(doc(db, 'clients', rootId), {
+              child_renewals: arrayUnion(newRef.id),
+              renewal_count: increment(1),
+              updated_at: serverTimestamp(),
+            });
+          } catch (_) { /* parent may be gone; ignore */ }
+        }
       }
       logActivity(`${isEdit ? 'Updated' : 'Added'} policy${fields.client_name ? ` for ${fields.client_name}` : ''}${fields.araksha_ib_file_no ? ` (${fields.araksha_ib_file_no})` : ''}`);
       onSuccess?.();
@@ -844,23 +925,40 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
   };
 
   /* ── Renewal — build a pre-filled copy of this policy as a new "Renewal"
-     record, linked to its parent and the original (root) policy. The parent
-     dialog opens it as a new client and bumps the root's renewal count on save. */
+     record. Renewals are FLAT children of the original "New" policy (the root):
+     both renewal_of and root_policy_id point at that root, so renewing a renewal
+     still attaches to the same parent instead of chaining. The new record is
+     registered on the parent (child_renewals) exactly once, at save. */
   const buildRenewal = () => {
     const datePayload = {};
     Object.entries(dates).forEach(([k, v]) => {
       if (k === 'date_added') return;
       if (v && !isNaN(v)) datePayload[k] = v.toISOString().split('T')[0];
     });
+    // The root is the original New policy: this record's own root if it has one
+    // (i.e. it's already a renewal), otherwise this record itself.
     const root = initialData.root_policy_id || initialData.id || '';
     return {
       ...riskValues, ...fields, ...datePayload,
       product_key: productKey || initialData.product_key || '',
       new_renewal: 'Renewal',
-      renewal_of: initialData.id || '',
+      renewal_of: root,
       root_policy_id: root,
     };
   };
+
+  // Renewal family — the original New policy (root) plus all its renewals, shown in
+  // edit mode so the parent keeps track of its children.
+  const [renewalKin, setRenewalKin] = useState([]);
+  const renewalRootId = isEdit ? (initialData.root_policy_id || initialData.id || '') : '';
+  useEffect(() => {
+    let alive = true;
+    if (!renewalRootId) { setRenewalKin([]); return; }
+    getDocs(query(collection(db, 'clients'), where('root_policy_id', '==', renewalRootId)))
+      .then(snap => { if (alive) setRenewalKin(snap.docs.filter(d => d.id !== renewalRootId).map(d => ({ id: d.id, ...d.data() }))); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [renewalRootId]);
 
   /* ── Insurance Provider dropdown — base list + user-added companies saved to
      Firestore ('insurance_providers') so they persist in the dropdown for
@@ -1072,6 +1170,30 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
             </Button>
           )}
         </Box>
+        {isEdit && (() => {
+          const isChild = !!initialData.root_policy_id && initialData.root_policy_id !== initialData.id;
+          if (!isChild && renewalKin.length === 0) return null;
+          return (
+            <Box sx={{ mb: 2, p: 1.2, borderRadius: '10px', border: '1px solid rgba(37,94,171,0.18)', bgcolor: 'rgba(37,94,171,0.04)' }}>
+              <Typography sx={{ fontSize: 10.5, fontWeight: 800, color: '#255EAB', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.6 }}>
+                {isChild ? 'This is a renewal — part of a policy family' : `Renewals (${renewalKin.length})`}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
+                {isChild && (
+                  <Chip label="Renewal of the original policy" size="small"
+                    sx={{ height: 22, fontSize: 10.5, fontWeight: 700, bgcolor: 'rgba(124,58,237,0.12)', color: '#7c3aed' }} />
+                )}
+                {renewalKin.map(k => (
+                  <Chip key={k.id} label={k.araksha_ib_file_no || k.policy_no || k.client_name || k.id.slice(0, 6)} size="small"
+                    sx={{ height: 22, fontSize: 10.5, fontWeight: 700, bgcolor: 'rgba(37,94,171,0.10)', color: '#255EAB' }} />
+                ))}
+              </Box>
+              <Typography sx={{ fontSize: 10.5, color: '#9CA3AF', mt: 0.6 }}>
+                Deleting the original policy also deletes its renewals.
+              </Typography>
+            </Box>
+          );
+        })()}
         <Grid container spacing={2} sx={{ mb: 2.5 }}>
           <Grid item xs={12} sm={6} md={4}>
             <TextField label="Araksha IB File No." value={fields.araksha_ib_file_no}
@@ -1346,13 +1468,72 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
 
         {/* ── Payment ──────────────────────────────────────── */}
         <SectionHeader title="Payment" />
-        <Grid container spacing={2} sx={{ mb: 2.5 }}>
-          {textFields.filter(f => f.section === 'Payment').map(f => (
-            <Grid item xs={12} sm={6} md={4} key={f.name}>
-              {renderStaticField(f)}
-            </Grid>
-          ))}
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          {/* Payment Status stays policy-level; the rest is a per-payment ledger. */}
+          <Grid item xs={12} sm={6} md={4}>
+            {renderStaticField(textFields.find(f => f.name === 'payment_status'))}
+          </Grid>
+          <Grid item xs={12} sm={6} md={8}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', height: '100%' }}>
+              <Box sx={{ px: 1.5, py: 0.8, borderRadius: '10px', bgcolor: 'rgba(5,150,105,0.08)', border: '1px solid rgba(5,150,105,0.22)' }}>
+                <Typography sx={{ fontSize: 10.5, color: '#6B7280', fontWeight: 700 }}>Total Amount Received</Typography>
+                <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#059669' }}>LKR {totalReceivedNum.toLocaleString()}</Typography>
+              </Box>
+              <Typography sx={{ fontSize: 11, color: '#9CA3AF' }}>
+                {payments.length} payment{payments.length === 1 ? '' : 's'} (LKR {paymentsTotal.toLocaleString()})
+                {endoPaidTotal ? ` + endorsements LKR ${endoPaidTotal.toLocaleString()}` : ''}
+              </Typography>
+            </Box>
+          </Grid>
         </Grid>
+
+        <Box sx={{ mb: 2.5 }}>
+          {payments.length === 0 ? (
+            <Typography sx={{ color: '#9CA3AF', fontSize: 13, mb: 1 }}>No payments recorded yet.</Typography>
+          ) : payments.map((p, idx) => (
+            <Box key={p.id} sx={{ p: 1.5, mb: 1, borderRadius: '10px', border: '1px solid rgba(56,163,224,0.18)', bgcolor: 'rgba(56,163,224,0.03)' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Box sx={{ width: 24, height: 24, flexShrink: 0, borderRadius: '50%', bgcolor: '#255EAB', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>{idx + 1}</Box>
+                <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#255EAB' }}>Payment {idx + 1}</Typography>
+                <Box sx={{ flex: 1 }} />
+                <IconButton size="small" onClick={() => removePayment(p.id)} sx={{ color: '#dc2626' }}><DeleteOutlineIcon sx={{ fontSize: 18 }} /></IconButton>
+              </Box>
+              <Grid container spacing={1.5}>
+                <Grid item xs={12} sm={6} md={4}>
+                  <NumericField label="Amount Received" value={p.amount_received} onChange={e => updatePayment(p.id, 'amount_received', e.target.value)} fullWidth size="small" sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField type="date" label="Payment Date" InputLabelProps={{ shrink: true }} value={p.payment_date} onChange={e => updatePayment(p.id, 'payment_date', e.target.value)} fullWidth size="small" sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel sx={{ fontSize: 13 }}>Payment Method</InputLabel>
+                    <Select label="Payment Method" value={p.payment_method} onChange={e => updatePayment(p.id, 'payment_method', e.target.value)} sx={{ borderRadius: '10px', fontSize: 13 }}>
+                      <MenuItem value="" sx={{ fontSize: 13 }}><em>—</em></MenuItem>
+                      {dropdowns.payment_method.map(m => <MenuItem key={m} value={m} sx={{ fontSize: 13 }}>{m}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField label="Cheque / Slip No." value={p.cheque_slip_no} onChange={e => updatePayment(p.id, 'cheque_slip_no', e.target.value)} fullWidth size="small" sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField label="Receipt No." value={p.receipt_no} onChange={e => updatePayment(p.id, 'receipt_no', e.target.value)} fullWidth size="small" sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField label="Debit Note No." value={p.debit_note_no} onChange={e => updatePayment(p.id, 'debit_note_no', e.target.value)} fullWidth size="small" sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField type="date" label="Debit Note Date" InputLabelProps={{ shrink: true }} value={p.debit_note_date} onChange={e => updatePayment(p.id, 'debit_note_date', e.target.value)} fullWidth size="small" sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
+                </Grid>
+              </Grid>
+            </Box>
+          ))}
+          <Button onClick={addPayment} startIcon={<AddCircleOutlineIcon />} variant="outlined" size="small"
+            sx={{ textTransform: 'none', borderRadius: '10px', fontSize: 12.5, fontWeight: 600, borderColor: '#255EAB', color: '#255EAB' }}>
+            Add Payment
+          </Button>
+        </Box>
 
         {/* ── Claims ───────────────────────────────────────── */}
         <SectionHeader title="Claims" />
@@ -1463,6 +1644,27 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
                               ))}
                             </Box>
                           )}
+                          {/* Amount Paid — editable; rolls into the policy's Amount Received */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.8 }}>
+                            {editingPaid && editingPaid.id === e.id ? (
+                              <>
+                                <NumericField label="Amount Paid" value={editingPaid.value} autoFocus
+                                  onChange={ev => setEditingPaid(p => ({ ...p, value: ev.target.value }))}
+                                  size="small" sx={{ maxWidth: 170, '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: 12.5 } }} />
+                                <IconButton size="small" onClick={() => { setEndorsementPaid(e.id, editingPaid.value); setEditingPaid(null); }} sx={{ color: '#059669' }}><CheckCircleOutlinedIcon sx={{ fontSize: 18 }} /></IconButton>
+                                <IconButton size="small" onClick={() => setEditingPaid(null)} sx={{ color: '#9CA3AF' }}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+                              </>
+                            ) : (
+                              <>
+                                <Box sx={{ px: 1, py: 0.4, borderRadius: '7px', bgcolor: num(e.amount_paid) ? 'rgba(5,150,105,0.08)' : 'rgba(148,163,184,0.10)', border: `1px solid ${num(e.amount_paid) ? 'rgba(5,150,105,0.25)' : 'rgba(148,163,184,0.25)'}` }}>
+                                  <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: num(e.amount_paid) ? '#059669' : '#9CA3AF' }}>
+                                    Paid: LKR {num(e.amount_paid).toLocaleString()}
+                                  </Typography>
+                                </Box>
+                                <IconButton size="small" onClick={() => setEditingPaid({ id: e.id, value: e.amount_paid || '' })} sx={{ color: '#7c3aed' }}><EditOutlinedIcon sx={{ fontSize: 16 }} /></IconButton>
+                              </>
+                            )}
+                          </Box>
                           {e.created_by && <Typography sx={{ fontSize: 10, color: '#9CA3AF', mt: 0.4 }}>Recorded by {e.created_by}</Typography>}
                         </Box>
                         <IconButton size="small" onClick={() => deleteEndorsement(e.id)} sx={{ color: '#dc2626' }}><DeleteOutlineIcon sx={{ fontSize: 18 }} /></IconButton>
@@ -1511,6 +1713,11 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                   <NumericField label="Sum Insured Change (+/-)" value={endoDraft.sum_insured_change} onChange={e => setEndoDraft(d => ({ ...d, sum_insured_change: e.target.value }))} fullWidth size="small" sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <NumericField label="Amount Paid (optional)" value={endoDraft.amount_paid} onChange={e => setEndoDraft(d => ({ ...d, amount_paid: e.target.value }))} fullWidth size="small"
+                    helperText="Adds to the policy's Amount Received"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
                 </Grid>
                 <Grid item xs={12}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>

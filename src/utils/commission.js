@@ -22,14 +22,26 @@ export function liveCommission(client, schedules) {
   const mc = c.main_class || '';
   const rate = schedules ? rateFor(schedules, c.product, mc, c.policy_period_from) : defaultRate(mc);
 
-  const commission_pct   = has(c.commission_pct)   ? c.commission_pct   : String(rate.basic);
-  const commission_basic = has(c.commission_basic) ? c.commission_basic : (num(c.basic_premium) ? String(r2(num(c.basic_premium) * rate.basic / 100)) : '');
+  let commission_pct     = has(c.commission_pct)   ? c.commission_pct   : String(rate.basic);
+  let commission_basic   = has(c.commission_basic) ? c.commission_basic : (num(c.basic_premium) ? String(r2(num(c.basic_premium) * rate.basic / 100)) : '');
   const commission_srcc  = has(c.commission_srcc)  ? c.commission_srcc  : (num(c.srcc_premium)  ? String(r2(num(c.srcc_premium)  * rate.srcc  / 100)) : '');
   const commission_tc    = has(c.commission_tc)    ? c.commission_tc    : (num(c.tc_premium)    ? String(r2(num(c.tc_premium)    * rate.tc    / 100)) : '');
 
-  const special = num(c.commission_special) || num(c.commission_special_amount); // new field, else legacy
+  // Special commission: the new single field, else the legacy +/- amount. Older
+  // Special records kept their commission in Basic — for a Special policy that value
+  // IS the special commission, so surface it under Special and clear Basic (display
+  // only; the record persists this on its next save via the form migration).
+  let commission_special = has(c.commission_special) ? c.commission_special
+    : (num(c.commission_special_amount) ? String(num(c.commission_special_amount)) : '');
+  if (c.commission_type === 'Special' && !num(commission_special) && num(commission_basic)) {
+    commission_special = commission_basic;
+    commission_basic = '';
+    commission_pct = '';
+  }
+
+  const special = num(commission_special);
   const total = num(commission_basic) + num(commission_srcc) + num(commission_tc) + special;
   const commission_total = has(c.commission_total) ? c.commission_total : (total ? String(r2(total)) : '');
 
-  return { commission_pct, commission_basic, commission_srcc, commission_tc, commission_total };
+  return { commission_pct, commission_basic, commission_srcc, commission_tc, commission_special, commission_total };
 }

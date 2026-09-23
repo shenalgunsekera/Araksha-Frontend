@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  collection, getDocs, getDoc, deleteDoc, doc, writeBatch, updateDoc, increment, serverTimestamp
+  collection, getDocs, getDoc, doc, writeBatch, updateDoc, query, where, arrayRemove
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { confirmTypedDelete } from '../utils/confirmDelete';
@@ -350,7 +350,6 @@ const TableSection = () => {
   const [loading,      setLoading]      = useState(true);
   const [addOpen,      setAddOpen]      = useState(false);
   const [prefillData,  setPrefillData]  = useState({});
-  const [pendingRenewalRoot, setPendingRenewalRoot] = useState(null);
   const [detailClient, setDetailClient] = useState(null);
   const [editClient,   setEditClient]   = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -544,10 +543,33 @@ const TableSection = () => {
   /* delete single */
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    if (!confirmTypedDelete('Delete this client and their records?')) return;
+    const t = deleteTarget;
+    const isRoot = !t.root_policy_id || t.root_policy_id === t.id;
+    // Find this policy's child renewals (queried live so it's robust even if the
+    // stored child_renewals array is stale). Deleting the parent cascades to them.
+    let childCount = 0;
     try {
-      await deleteDoc(doc(db, 'clients', deleteTarget.id));
-      toast('Client deleted');
+      const kids = isRoot
+        ? (await getDocs(query(collection(db, 'clients'), where('root_policy_id', '==', t.id)))).docs.filter(d => d.id !== t.id)
+        : [];
+      childCount = kids.length;
+      const msg = childCount > 0
+        ? `Delete this policy AND its ${childCount} renewal${childCount > 1 ? 's' : ''}? This cannot be undone.`
+        : 'Delete this client and their records?';
+      if (!confirmTypedDelete(msg)) return;
+
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'clients', t.id));
+      kids.forEach(k => batch.delete(k.ref));
+      await batch.commit();
+
+      // If we deleted a renewal (child), detach it from its parent's record.
+      if (!isRoot && t.root_policy_id) {
+        try {
+          await updateDoc(doc(db, 'clients', t.root_policy_id), { child_renewals: arrayRemove(t.id) });
+        } catch (_) { /* parent may be gone; ignore */ }
+      }
+      toast(childCount > 0 ? `Deleted policy + ${childCount} renewal${childCount > 1 ? 's' : ''}` : 'Client deleted');
       _cachedClients = null; fetchClients(true);
     } catch {
       toast('Failed to delete client', 'error');
@@ -954,15 +976,12 @@ const TableSection = () => {
         </DialogTitle>
         <DialogContent sx={{ p: 0 }}>
           <AddClientForm
-            onSuccess={async () => {
-              // A renewal was just created — bump the original policy's renewal count.
-              if (pendingRenewalRoot) {
-                try { await updateDoc(doc(db, 'clients', pendingRenewalRoot), { renewal_count: increment(1), updated_at: serverTimestamp() }); } catch (_) { /* ignore */ }
-                setPendingRenewalRoot(null);
-              }
+            onSuccess={() => {
+              // The renewal↔parent linkage (child_renewals + count) is written inside
+              // AddClientForm itself, so nothing extra is needed here.
               handleAddClient(); setPrefillData({});
             }}
-            onCancel={() => { setAddOpen(false); setPrefillData({}); setPendingRenewalRoot(null); }}
+            onCancel={() => { setAddOpen(false); setPrefillData({}); }}
             initialData={prefillData}
           />
         </DialogContent>
@@ -981,7 +1000,6 @@ const TableSection = () => {
               onRenew={(renewalData) => {
                 setEditClient(null);
                 setPrefillData(renewalData);
-                setPendingRenewalRoot(renewalData.root_policy_id || null);
                 setAddOpen(true);
               }}
             />
@@ -996,6 +1014,15 @@ const TableSection = () => {
           <Typography>
             Are you sure you want to delete <strong>{deleteTarget?.client_name}</strong>? This cannot be undone.
           </Typography>
+          {(() => {
+            const n = Array.isArray(deleteTarget?.child_renewals) ? deleteTarget.child_renewals.length : (Number(deleteTarget?.renewal_count) || 0);
+            const root = deleteTarget && (!deleteTarget.root_policy_id || deleteTarget.root_policy_id === deleteTarget.id);
+            return root && n > 0 ? (
+              <Typography sx={{ mt: 1, fontSize: 12.5, fontWeight: 700, color: '#e04040' }}>
+                Its {n} renewal{n > 1 ? 's' : ''} will be deleted too.
+              </Typography>
+            ) : null;
+          })()}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
           <Button onClick={() => setDeleteTarget(null)} variant="outlined" sx={{ color: '#6B7280', borderColor: '#e0e0e0' }}>
