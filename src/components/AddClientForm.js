@@ -465,8 +465,13 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
       receipt_no: initialData.receipt_no || '', debit_note_no: initialData.debit_note_no || '',
       debit_note_date: initialData.debit_note_date || '',
     };
-    return Object.values(single).some(v => v !== '' && v != null) ? [{ id: genId(), ...single }] : [];
+    if (Object.values(single).some(v => v !== '' && v != null)) return [{ id: genId(), ...single }];
+    // Seed one blank row so the payment fields are visible immediately (matches the
+    // old single-payment form); fully-empty rows are dropped on save.
+    return [{ id: genId(), ...freshPayment() }];
   });
+  const PAY_KEYS = ['amount_received', 'payment_date', 'payment_method', 'cheque_slip_no', 'receipt_no', 'debit_note_no', 'debit_note_date'];
+  const cleanPayments = payments.filter(p => PAY_KEYS.some(k => (p[k] ?? '') !== ''));
   const updatePayment = (id, key, val) => setPayments(list => list.map(p => (p.id === id ? { ...p, [key]: val } : p)));
   const addPayment    = () => setPayments(list => [...list, { id: genId(), ...freshPayment() }]);
   const removePayment = (id) => setPayments(list => list.filter(p => p.id !== id));
@@ -481,8 +486,7 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
     total_premium_change: '', sum_insured_change: '', amount_paid: '', documents: [],
   });
   const [endoDraft, setEndoDraft] = useState(() => freshDraft());
-  // Which endorsement's Amount Paid is being edited inline ({ id, value }), plus
-  // the running Amount Received update it drives.
+  // Which endorsement's Amount Paid is being edited inline ({ id, value }).
   const [editingPaid, setEditingPaid] = useState(null);
   const [endoError, setEndoError] = useState('');
   const [endoUploading, setEndoUploading] = useState(false);
@@ -869,8 +873,8 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
       // the derived total (ledger + endorsement payments). Mirror the most recent
       // payment's details onto the top-level fields so reports / CSV / PDF that read
       // the single payment fields keep showing a sensible value.
-      const lastPay = payments[payments.length - 1] || {};
-      payload.payments = payments;
+      const lastPay = cleanPayments[cleanPayments.length - 1] || {};
+      payload.payments = cleanPayments;
       payload.amount_received = totalReceivedNum ? String(totalReceivedNum) : '';
       payload.payment_date    = lastPay.payment_date || '';
       payload.payment_method  = lastPay.payment_method || '';
