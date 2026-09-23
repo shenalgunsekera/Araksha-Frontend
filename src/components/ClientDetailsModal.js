@@ -999,9 +999,10 @@ const ClientDetailsModal = ({ client, onClose }) => {
         return (
           <Grid container spacing={2.5}>
             <Grid item xs={12} sm={6} md={4}><Field label="Commission Type"         value={client.commission_type} /></Grid>
-            <Grid item xs={12} sm={6} md={4}><Field label="Basic Commission %"      value={lc.commission_pct} /></Grid>
-            {isSpecial && (
+            {isSpecial ? (
               <Grid item xs={12} sm={6} md={4}><Field label="Special Commission"    value={fmtLKR(lc.commission_special)} /></Grid>
+            ) : (
+              <Grid item xs={12} sm={6} md={4}><Field label="Basic Commission %"    value={lc.commission_pct} /></Grid>
             )}
             <Grid item xs={12} sm={6} md={4}><Field label="Commission Basic"        value={fmtLKR(lc.commission_basic)} /></Grid>
             <Grid item xs={12} sm={6} md={4}><Field label="Commission SRCC"         value={fmtLKR(lc.commission_srcc)} /></Grid>

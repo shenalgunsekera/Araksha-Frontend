@@ -1457,6 +1457,9 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
           {textFields.filter(f => f.section === 'Commission')
             // The single Special Commission shows only for a Special type.
             .filter(f => f.name === 'commission_special' ? fields.commission_type === 'Special' : true)
+            // Basic Commission % is a Standard-only rate — hidden for Special, which
+            // uses the flat Special Commission amount instead.
+            .filter(f => f.name === 'commission_pct' ? fields.commission_type !== 'Special' : true)
             .map(f => {
               // Standard derives Basic/SRCC/TC from the rate table (locked). Special
               // leaves them manual so they can be entered by hand.

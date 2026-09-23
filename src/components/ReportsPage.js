@@ -158,6 +158,57 @@ const QUOTE_FIELDS = [
   { key: 'created_at',         label: 'Date Created',        type: 'date'   },
 ];
 
+// Endorsement report fields — one row per endorsement across all policies, built
+// in loadData() from each policy's endorsements[] array (with policy context).
+const ENDORSEMENT_FIELDS = [
+  // Policy context
+  { key: 'policy_client_name', label: 'Client Name',        type: 'string' },
+  { key: 'policy_no',          label: 'Policy No',          type: 'string' },
+  { key: 'araksha_ib_file_no', label: 'Araksha IB File No.',type: 'string' },
+  { key: 'product',            label: 'Product',            type: 'string' },
+  { key: 'main_class',         label: 'Main Class',         type: 'string' },
+  { key: 'insurance_provider', label: 'Insurer',            type: 'string' },
+  // Endorsement
+  { key: 'endorsement_no',     label: 'Endorsement No',     type: 'number' },
+  { key: 'effective_date',     label: 'Effective Date',     type: 'date'   },
+  { key: 'type',               label: 'Type',               type: 'string' },
+  { key: 'description',        label: 'Description',         type: 'string' },
+  // Changes
+  { key: 'basic_premium_change', label: 'Basic Premium Δ',  type: 'number' },
+  { key: 'srcc_premium_change',  label: 'SRCC Premium Δ',   type: 'number' },
+  { key: 'tc_premium_change',    label: 'TC Premium Δ',     type: 'number' },
+  { key: 'net_premium_change',   label: 'Net Premium Δ',    type: 'number' },
+  { key: 'total_premium_change', label: 'Total Premium Δ',  type: 'number' },
+  { key: 'sum_insured_change',   label: 'Sum Insured Δ',    type: 'number' },
+  { key: 'commission_change',    label: 'Commission Δ',     type: 'number' },
+  { key: 'amount_paid',          label: 'Amount Paid',      type: 'number' },
+  { key: 'documents_count',      label: 'Documents',        type: 'number' },
+  // Audit
+  { key: 'created_by',         label: 'Recorded By',        type: 'string' },
+  { key: 'created_at',         label: 'Recorded On',        type: 'date'   },
+];
+
+// Payment report fields — one row per payment across all policies (from each
+// policy's payments[] ledger, or its single-payment fields for older records).
+const PAYMENT_FIELDS = [
+  { key: 'policy_client_name', label: 'Client Name',        type: 'string' },
+  { key: 'policy_no',          label: 'Policy No',          type: 'string' },
+  { key: 'araksha_ib_file_no', label: 'Araksha IB File No.',type: 'string' },
+  { key: 'product',            label: 'Product',            type: 'string' },
+  { key: 'main_class',         label: 'Main Class',         type: 'string' },
+  { key: 'insurance_provider', label: 'Insurer',            type: 'string' },
+  { key: 'payment_status',     label: 'Payment Status',     type: 'string' },
+  { key: 'payment_no',         label: 'Payment No',         type: 'number' },
+  { key: 'amount_received',    label: 'Amount Received',    type: 'number' },
+  { key: 'payment_date',       label: 'Payment Date',       type: 'date'   },
+  { key: 'payment_method',     label: 'Payment Method',     type: 'string' },
+  { key: 'cheque_slip_no',     label: 'Cheque / Slip No.',  type: 'string' },
+  { key: 'receipt_no',         label: 'Receipt No.',        type: 'string' },
+  { key: 'debit_note_no',      label: 'Debit Note No.',     type: 'string' },
+  { key: 'debit_note_date',    label: 'Debit Note Date',    type: 'date'   },
+  { key: 'source_type',        label: 'Payment Source',     type: 'string' },
+];
+
 const NUMBER_OPS = ['sum','avg','min','max','count'];
 const FILTER_OPS = {
   string: ['equals','contains','starts with','not equals'],
@@ -846,6 +897,8 @@ const ReportsPage = () => {
   const [clients,    setClients]    = useState([]);
   const [claims,     setClaims]     = useState([]);
   const [quotes,     setQuotes]     = useState([]);
+  const [endoRows,   setEndoRows]   = useState([]);
+  const [payRows,    setPayRows]    = useState([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   // Time period (by record creation date) — applied to whichever source is active.
   const [periodFrom, setPeriodFrom] = useState(null);
@@ -905,6 +958,50 @@ const ReportsPage = () => {
     // Compute O/S Days live (counts up from policy start, 0 once paid) so reports
     // never show the stale stored snapshot or a leftover value on paid policies.
     setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, ...liveCommission(c, schedules), os_days: liveOsDays(c), policy_status: policyStatus(c), customer_type: normCustomerType(c.customer_type), new_renewal: c.new_renewal || ((c.main_class==='Marine'||/marine/i.test(c.product||''))?'New':'')}; }));
+    // Flatten every policy's endorsements into their own report rows (with policy
+    // context) so endorsements can be filtered / grouped / summed / charted.
+    const eNum = (v)=>{ const x=parseFloat(String(v??'').replace(/,/g,'')); return isNaN(x)?'':x; };
+    const eRows=[];
+    cS.docs.forEach(d=>{
+      const c=d.data(); const list=Array.isArray(c.endorsements)?c.endorsements:[];
+      list.forEach(e=>eRows.push({
+        id:`${d.id}_${e.id||e.endorsement_no}`,
+        policy_client_name:c.client_name||'', policy_no:c.policy_no||'', araksha_ib_file_no:c.araksha_ib_file_no||'',
+        product:c.product||'', main_class:c.main_class||'', insurance_provider:c.insurance_provider||'',
+        endorsement_no:e.endorsement_no||'', effective_date:e.effective_date||'', type:e.type||'', description:e.description||'',
+        basic_premium_change:eNum(e.basic_premium_change), srcc_premium_change:eNum(e.srcc_premium_change),
+        tc_premium_change:eNum(e.tc_premium_change), net_premium_change:eNum(e.net_premium_change),
+        total_premium_change:(eNum(e.total_premium_change)||0)+(eNum(e.premium_change)||0)||'',
+        sum_insured_change:eNum(e.sum_insured_change), commission_change:eNum(e.commission_change),
+        amount_paid:eNum(e.amount_paid), documents_count:Array.isArray(e.documents)?e.documents.length:0,
+        created_by:e.created_by||'', created_at:e.created_at||'',
+      }));
+    });
+    setEndoRows(eRows);
+    // Flatten every payment into its own report row: policy ledger payments (or the
+    // single-payment fields for older records) plus endorsement payments, so all
+    // money received is reportable with full policy context.
+    const pRows=[];
+    cS.docs.forEach(d=>{
+      const c=d.data();
+      const ctx={ policy_client_name:c.client_name||'', policy_no:c.policy_no||'', araksha_ib_file_no:c.araksha_ib_file_no||'',
+        product:c.product||'', main_class:c.main_class||'', insurance_provider:c.insurance_provider||'', payment_status:c.payment_status||'' };
+      const ledger=Array.isArray(c.payments)&&c.payments.length ? c.payments
+        : ([{ amount_received:c.amount_received, payment_date:c.payment_date, payment_method:c.payment_method, cheque_slip_no:c.cheque_slip_no, receipt_no:c.receipt_no, debit_note_no:c.debit_note_no, debit_note_date:c.debit_note_date }]
+            .filter(p=>Object.values(p).some(v=>v!==''&&v!=null)));
+      ledger.forEach((p,i)=>pRows.push({
+        id:`${d.id}_pay_${p.id||i}`, ...ctx, source_type:'Policy', payment_no:i+1,
+        amount_received:eNum(p.amount_received), payment_date:p.payment_date||'', payment_method:p.payment_method||'',
+        cheque_slip_no:p.cheque_slip_no||'', receipt_no:p.receipt_no||'', debit_note_no:p.debit_note_no||'', debit_note_date:p.debit_note_date||'',
+      }));
+      (Array.isArray(c.endorsements)?c.endorsements:[]).forEach(e=>{
+        if(!eNum(e.amount_paid)) return;
+        pRows.push({ id:`${d.id}_endopay_${e.id||e.endorsement_no}`, ...ctx, source_type:`Endorsement #${e.endorsement_no||''}`.trim(),
+          payment_no:'', amount_received:eNum(e.amount_paid), payment_date:e.effective_date||e.created_at||'',
+          payment_method:'', cheque_slip_no:'', receipt_no:'', debit_note_no:'', debit_note_date:'' });
+      });
+    });
+    setPayRows(pRows);
     setClaims(clS.docs.map(d=>{
       const c={id:d.id,...d.data()};
       // Surface the process-tracker richness (per-step notes, uploaded docs and
@@ -991,13 +1088,14 @@ const ReportsPage = () => {
     return [...CLIENT_FIELDS, ...extras];
   }, [clients]);
 
-  const fieldsFor = (src) => src === 'clients' ? clientFields : src === 'claims' ? CLAIM_FIELDS : QUOTE_FIELDS;
+  const fieldsFor = (src) => src === 'clients' ? clientFields : src === 'claims' ? CLAIM_FIELDS : src === 'endorsements' ? ENDORSEMENT_FIELDS : src === 'payments' ? PAYMENT_FIELDS : QUOTE_FIELDS;
   const sourceFields = fieldsFor(source);
+  const datasetFor = (src) => src === 'clients' ? clients : src === 'claims' ? claims : src === 'endorsements' ? endoRows : src === 'payments' ? payRows : quotes;
 
   // Distinct values actually present in the data for a field, so filter values
   // can be picked from a dropdown instead of typed blind.
   const distinctValues = useCallback((fieldKey) => {
-    const base = source === 'clients' ? clients : source === 'claims' ? claims : quotes;
+    const base = source === 'clients' ? clients : source === 'claims' ? claims : source === 'endorsements' ? endoRows : source === 'payments' ? payRows : quotes;
     const set = new Set();
     for (const row of base) {
       let v = row?.[fieldKey];
@@ -1010,17 +1108,20 @@ const ReportsPage = () => {
     // Customer type always offers the full canonical set, even if some aren't in the data yet.
     if (fieldKey === 'customer_type') CUSTOMER_TYPES.forEach(t => set.add(t));
     return [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  }, [source, clients, claims, quotes]);
+  }, [source, clients, claims, quotes, endoRows, payRows]);
 
   // Compute report results from an explicit config + the current datasets/period.
   // Used by both the Run button and by running a template directly, so a template
   // run never depends on React state that hasn't updated yet.
   const buildResults = (cfg) => {
-    const base = cfg.source==='clients'?clients:cfg.source==='claims'?claims:quotes;
+    const base = datasetFor(cfg.source);
     const from = periodFrom ? new Date(new Date(periodFrom).setHours(0,0,0,0)) : null;
     const to   = periodTo   ? new Date(new Date(periodTo).setHours(23,59,59,999)) : null;
-    // Clients can filter on policy dates; claims/quotes only have a creation date.
-    const dateField = cfg.source==='clients' ? (cfg.periodField||periodField) : 'created_at';
+    // Clients filter on policy dates, endorsements on their effective date,
+    // payments on their payment date, the rest on their creation date.
+    const dateField = cfg.source==='clients' ? (cfg.periodField||periodField)
+      : cfg.source==='endorsements' ? 'effective_date'
+      : cfg.source==='payments' ? 'payment_date' : 'created_at';
     const raw = (from||to) ? base.filter(r=>{
       const v=r[dateField]; const d=v?.toDate?v.toDate():(v?new Date(v):null);
       if(!d||isNaN(d)) return false;
@@ -1252,6 +1353,8 @@ const ReportsPage = () => {
                 <FormControl fullWidth size="small" sx={{mb:2.5}}>
                   <Select value={source} onChange={e=>{setSource(e.target.value);setSelFields([]);setGroupBy('');setAggregations([]);setFilters([]);setResults(null);setPivotData(null);}}>
                     <MenuItem value="clients">Underwriting (Clients)</MenuItem>
+                    <MenuItem value="endorsements">Endorsements</MenuItem>
+                    <MenuItem value="payments">Payments</MenuItem>
                     <MenuItem value="claims">Claims</MenuItem>
                     <MenuItem value="quotes">Quotations</MenuItem>
                   </Select>

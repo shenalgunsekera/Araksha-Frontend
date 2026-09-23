@@ -363,6 +363,7 @@ const TableSection = () => {
   const [filterType,   setFilterType]   = useState('all');
   const [filterYear,   setFilterYear]   = useState('all');
   const [filterMonth,  setFilterMonth]  = useState('all');
+  const [filterDateBasis, setFilterDateBasis] = useState('either'); // which policy date the period filter uses
 
   // ── Document import state ─────────────────────────────────────────────
   const [docImportOpen,     setDocImportOpen]     = useState(false);
@@ -508,8 +509,8 @@ const TableSection = () => {
     let list = clients;
     if (filterType !== 'all') list = list.filter(c => normCustType(c.customer_type) === filterType);
 
-    // Policy period filters — match if the policy's From OR To date falls in the
-    // selected year / month (filters by the policy period, not when it was added).
+    // Policy period filters — match the selected year / month against the policy's
+    // start date, expiry date, or either (the basis chosen alongside the filter).
     if (filterYear !== 'all' || filterMonth !== 'all') {
       const inSel = (v) => {
         const d = v ? new Date(v) : null;
@@ -518,7 +519,10 @@ const TableSection = () => {
         if (filterMonth !== 'all' && d.getMonth()    !== Number(filterMonth)) return false;
         return true;
       };
-      list = list.filter(c => inSel(c.policy_period_from) || inSel(c.policy_period_to));
+      list = list.filter(c =>
+        filterDateBasis === 'from' ? inSel(c.policy_period_from)
+        : filterDateBasis === 'to' ? inSel(c.policy_period_to)
+        : inSel(c.policy_period_from) || inSel(c.policy_period_to));
     }
 
     if (searchQuery) {
@@ -533,7 +537,7 @@ const TableSection = () => {
       );
     }
     return list;
-  }, [clients, filterType, filterYear, filterMonth, searchQuery]);
+  }, [clients, filterType, filterYear, filterMonth, filterDateBasis, searchQuery]);
 
   /* paginate */
   const pageCount    = Math.ceil(filtered.length / rowsPerPage);
@@ -740,8 +744,15 @@ const TableSection = () => {
               {['January','February','March','April','May','June','July','August','September','October','November','December']
                 .map((m, i) => <MenuItem key={i} value={i} sx={{ fontSize: 12 }}>{m}</MenuItem>)}
             </Select>
+            <Typography sx={{ fontSize: 11.5, color: '#9CA3AF', fontWeight: 600, ml: 0.5 }}>by</Typography>
+            <Select size="small" value={filterDateBasis} onChange={e => { setFilterDateBasis(e.target.value); setPage(1); }}
+              sx={{ fontSize: 12, height: 30, minWidth: 120, '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(56,163,224,0.25)' } }}>
+              <MenuItem value="from"   sx={{ fontSize: 12 }}>Policy From</MenuItem>
+              <MenuItem value="to"     sx={{ fontSize: 12 }}>Policy To</MenuItem>
+              <MenuItem value="either" sx={{ fontSize: 12 }}>From or To</MenuItem>
+            </Select>
             {(filterYear !== 'all' || filterMonth !== 'all') && (
-              <Chip label="Clear" size="small" clickable onClick={() => { setFilterYear('all'); setFilterMonth('all'); setPage(1); }}
+              <Chip label="Clear" size="small" clickable onClick={() => { setFilterYear('all'); setFilterMonth('all'); setFilterDateBasis('either'); setPage(1); }}
                 sx={{ fontSize: 11, height: 24, bgcolor: 'rgba(239,68,68,0.08)', color: '#ef4444' }} />
             )}
             {(filterYear !== 'all' || filterMonth !== 'all') && (

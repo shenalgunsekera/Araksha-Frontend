@@ -393,7 +393,7 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
         <DialogTitle sx={{ fontWeight: 800, fontSize: 16 }}>Dispute Raised</DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: 13, color: '#4B5563' }}>
-            A dispute can end in the claim being approved or rejected, so the status isn't
+            A dispute can end in the claim being settled or rejected, so the status isn't
             advanced automatically. Please set it manually for <strong>{claim.reference}</strong>.
           </Typography>
         </DialogContent>
@@ -401,8 +401,7 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
           <Button size="small" onClick={() => setDisputeOpen(false)} sx={{ color: '#6B7280' }}>Decide later</Button>
           <Box sx={{ flex: 1 }} />
           <Button size="small" variant="outlined" color="error" onClick={() => chooseDisputeStatus('Rejected')}>Rejected</Button>
-          <Button size="small" variant="outlined" onClick={() => chooseDisputeStatus('Under Review')}>Under Review</Button>
-          <Button size="small" variant="contained" color="success" onClick={() => chooseDisputeStatus('Approved')}>Approved</Button>
+          <Button size="small" variant="contained" color="success" onClick={() => chooseDisputeStatus('Settled')}>Settled</Button>
         </DialogActions>
       </Dialog>
     </Card>
