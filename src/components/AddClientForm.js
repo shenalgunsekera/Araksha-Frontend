@@ -989,6 +989,19 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
       if (k === 'date_added') return;
       if (v && !isNaN(v)) datePayload[k] = v.toISOString().split('T')[0];
     });
+    // Roll the period FORWARD to the next term so the renewal automatically lands on
+    // the next policy year — this is what steps a commission-structure product to its
+    // next (lower) rate with no manual date editing. New start = current expiry; new
+    // end = start + the same term length (falls back to +1 year if the term is unknown).
+    const oldFrom = dates.policy_period_from, oldTo = dates.policy_period_to;
+    if (oldTo && !isNaN(oldTo)) {
+      const nf = new Date(oldTo);
+      let nt;
+      if (oldFrom && !isNaN(oldFrom)) nt = new Date(oldTo.getTime() + (oldTo.getTime() - oldFrom.getTime()));
+      else { nt = new Date(oldTo); nt.setFullYear(nt.getFullYear() + 1); }
+      datePayload.policy_period_from = nf.toISOString().split('T')[0];
+      datePayload.policy_period_to   = nt.toISOString().split('T')[0];
+    }
     // The root is the original New policy: this record's own root if it has one
     // (i.e. it's already a renewal), otherwise this record itself.
     const root = initialData.root_policy_id || initialData.id || '';
@@ -998,6 +1011,13 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
       new_renewal: 'Renewal',
       renewal_of: root,
       root_policy_id: root,
+      // A renewal is a fresh period: clear the previous period's payments and
+      // received-commission so nothing stale carries over. The earned commission
+      // (basic / special) recalculates automatically for the new policy year.
+      payments: [],
+      amount_received: '', payment_date: '', payment_method: '', cheque_slip_no: '',
+      receipt_no: '', debit_note_no: '', debit_note_date: '', payment_status: 'Unpaid',
+      commission_amount_paid: '', commission_receive_date: '', commission_paid_method: '', commission_vat: '',
     };
   };
 
