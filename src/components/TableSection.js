@@ -364,6 +364,7 @@ const TableSection = () => {
   const [filterYear,   setFilterYear]   = useState('all');
   const [filterMonth,  setFilterMonth]  = useState('all');
   const [filterDateBasis, setFilterDateBasis] = useState('either'); // which policy date the period filter uses
+  const [sortBy, setSortBy] = useState('default'); // list sort order
 
   // ── Document import state ─────────────────────────────────────────────
   const [docImportOpen,     setDocImportOpen]     = useState(false);
@@ -536,8 +537,22 @@ const TableSection = () => {
         (c.email             || '').toLowerCase().includes(q)
       );
     }
+
+    // Sort — by policy period From / To dates (blank dates sink to the bottom).
+    if (sortBy !== 'default') {
+      const field = sortBy.startsWith('from') ? 'policy_period_from' : 'policy_period_to';
+      const dir   = sortBy.endsWith('desc') ? -1 : 1;
+      const t = (c) => { const d = new Date(c[field]); return isNaN(d) ? null : d.getTime(); };
+      list = [...list].sort((a, b) => {
+        const ta = t(a), tb = t(b);
+        if (ta === null && tb === null) return 0;
+        if (ta === null) return 1;   // blanks last
+        if (tb === null) return -1;
+        return (ta - tb) * dir;
+      });
+    }
     return list;
-  }, [clients, filterType, filterYear, filterMonth, filterDateBasis, searchQuery]);
+  }, [clients, filterType, filterYear, filterMonth, filterDateBasis, searchQuery, sortBy]);
 
   /* paginate */
   const pageCount    = Math.ceil(filtered.length / rowsPerPage);
@@ -755,6 +770,16 @@ const TableSection = () => {
               <Chip label="Clear" size="small" clickable onClick={() => { setFilterYear('all'); setFilterMonth('all'); setFilterDateBasis('either'); setPage(1); }}
                 sx={{ fontSize: 11, height: 24, bgcolor: 'rgba(239,68,68,0.08)', color: '#ef4444' }} />
             )}
+            <Box sx={{ flexGrow: 1 }} />
+            <Typography sx={{ fontSize: 11.5, color: '#9CA3AF', fontWeight: 600 }}>Sort:</Typography>
+            <Select size="small" value={sortBy} onChange={e => { setSortBy(e.target.value); setPage(1); }}
+              sx={{ fontSize: 12, height: 30, minWidth: 150, '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(56,163,224,0.25)' } }}>
+              <MenuItem value="default"   sx={{ fontSize: 12 }}>Newest added</MenuItem>
+              <MenuItem value="from_asc"  sx={{ fontSize: 12 }}>Policy From ↑ (oldest)</MenuItem>
+              <MenuItem value="from_desc" sx={{ fontSize: 12 }}>Policy From ↓ (newest)</MenuItem>
+              <MenuItem value="to_asc"    sx={{ fontSize: 12 }}>Policy To ↑ (soonest)</MenuItem>
+              <MenuItem value="to_desc"   sx={{ fontSize: 12 }}>Policy To ↓ (latest)</MenuItem>
+            </Select>
             {(filterYear !== 'all' || filterMonth !== 'all') && (
               <Typography sx={{ fontSize: 11.5, color: '#6B7280' }}>
                 {filtered.length} result{filtered.length !== 1 ? 's' : ''}
