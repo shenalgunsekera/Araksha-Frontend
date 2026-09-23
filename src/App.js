@@ -30,6 +30,7 @@ const QuoteResponsePage= lazy(() => import('./pages/QuoteResponsePage'));
 const QuoteSelectPage     = lazy(() => import('./pages/QuoteSelectPage'));
 const ComparisonPdfPage   = lazy(() => import('./pages/ComparisonPdfPage'));
 const RenewalsPage     = lazy(() => import('./pages/RenewalsPage'));
+const CommissionStructuresPage = lazy(() => import('./pages/CommissionStructuresPage'));
 const ClaimsPage       = lazy(() => import('./pages/ClaimsPage'));
 const MarketingPage    = lazy(() => import('./pages/MarketingPage'));
 const PortfolioPage    = lazy(() => import('./pages/PortfolioPage'));
@@ -587,6 +588,7 @@ function App() {
                               <Route path="/admin"         element={<AdminPanel />} />
                               <Route path="/quotations"    element={<ModuleGuard mod="quotations"><QuotationsPage /></ModuleGuard>} />
                               <Route path="/renewals"      element={<ModuleGuard mod="renewals"><RenewalsPage /></ModuleGuard>} />
+                              <Route path="/commission-structures" element={<ModuleGuard mod="commstructures"><CommissionStructuresPage /></ModuleGuard>} />
                               <Route path="/claims"        element={<ModuleGuard mod="claims"><ClaimsPage /></ModuleGuard>} />
                               <Route path="/marketing"     element={<ModuleGuard mod="marketing"><MarketingPage /></ModuleGuard>} />
                               <Route path="/portfolio"     element={<ModuleGuard mod="portfolio"><PortfolioPage /></ModuleGuard>} />
