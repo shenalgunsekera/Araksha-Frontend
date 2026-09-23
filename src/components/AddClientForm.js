@@ -6,6 +6,7 @@ import { logActivity } from '../utils/workSession';
 import { useAuth } from '../App';
 import { PRODUCTS } from '../config/products';
 import { rateFor } from '../utils/commissionRates';
+import { structureRate } from '../utils/commissionStructures';
 import { evaluateAutoCalc, describeAutoCalc } from '../utils/autoCalc';
 
 import Box from '@mui/material/Box';
@@ -531,26 +532,74 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
     return () => { alive = false; };
   }, []);
 
+  /* ── Commission structures (declining scales by policy year, per product) ──
+     When the policy's product has a structure, the MAIN commission % comes from
+     the scale for this policy's year — measured from the ORIGINAL policy's start
+     date — instead of the flat date-range rate. It steps down as the policy
+     renews. Configured in the Commission Structures module. */
+  const [commissionStructures, setCommissionStructures] = useState({});
+  useEffect(() => {
+    let alive = true;
+    getDoc(doc(db, 'settings', 'commission_structures'))
+      .then(snap => { if (alive && snap.exists()) setCommissionStructures(snap.data().products || {}); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  // A renewal's year is measured from the ORIGINAL (root) policy's start date, so
+  // fetch it when this record belongs to a renewal chain.
+  const [structRootStart, setStructRootStart] = useState('');
+  useEffect(() => {
+    let alive = true;
+    if (!initialData.root_policy_id) { setStructRootStart(''); return; }
+    getDoc(doc(db, 'clients', initialData.root_policy_id))
+      .then(s => { if (alive && s.exists()) setStructRootStart(s.data().policy_period_from || ''); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [initialData.root_policy_id]);
+
+  const thisStartStr = dates.policy_period_from && !isNaN(dates.policy_period_from)
+    ? dates.policy_period_from.toISOString().slice(0, 10) : '';
+  // The root start: the original policy's start for a renewal, else this policy's own
+  // start (a brand-new policy is Year 1).
+  const structRootStr = initialData.root_policy_id ? structRootStart : thisStartStr;
+  const structSegs = (() => { const v = commissionStructures[fields.product]; return (v && v.segments) || (Array.isArray(v) ? v : null); })();
+  const usesStructure = !!(structSegs && structSegs.length);
+  const structHit = usesStructure ? structureRate(structSegs, structRootStr, thisStartStr) : null;
+  // Rate for this policy year: the scale rate, 0 once the scale has ended, or null
+  // when the product has no structure (→ fall back to the normal date-range rate).
+  const structRateVal = usesStructure ? (structHit ? structHit.rate : 0) : null;
+  const structYear = structHit ? Math.floor(structHit.months / 12) + 1 : null;
+
   /* Standard commission auto-calculates from the admin rate table for the
-     product, using the rate whose date range contains the policy START date.
-     Special is entered by hand (a single Special Commission plus any manual
-     Basic/SRCC/TC), so it is never auto-derived. */
+     product, using the rate whose date range contains the policy START date —
+     or, for a product with a commission structure, the scale rate for this
+     policy's year. Special is entered by hand unless a structure applies. */
   const autoCommission = fields.commission_type === 'Standard';
   useEffect(() => {
     if (!autoCommission) return;
     const rate = rateFor(commissionSchedules, fields.product, fields.main_class, dates.policy_period_from);
-    const cb = num(fields.basic_premium) * rate.basic / 100;
+    // The basic % comes from the commission structure when the product has one,
+    // otherwise from the date-range rate table. SRCC / TC always use the rate table.
+    const basicPct = structRateVal != null ? structRateVal : rate.basic;
+    const cb = num(fields.basic_premium) * basicPct / 100;
     const cs = num(fields.srcc_premium)  * rate.srcc  / 100;
     const ct = num(fields.tc_premium)    * rate.tc    / 100;
     setFields(f => ({
       ...f,
-      commission_pct:   String(rate.basic),
+      commission_pct:   String(basicPct),
       commission_basic: roundMoney(cb),
       commission_srcc:  roundMoney(cs),
       commission_tc:    roundMoney(ct),
     }));
   }, [autoCommission, fields.commission_type, fields.main_class, fields.product, fields.basic_premium,
-      fields.srcc_premium, fields.tc_premium, dates.policy_period_from, commissionSchedules]);
+      fields.srcc_premium, fields.tc_premium, dates.policy_period_from, commissionSchedules, structRateVal]);
+
+  // Special commission with a structure: the scale rate is the special commission
+  // rate (× basic premium). Without a structure, Special stays fully manual.
+  useEffect(() => {
+    if (fields.commission_type !== 'Special' || structRateVal == null) return;
+    setFields(f => ({ ...f, commission_special: roundMoney(num(f.basic_premium) * structRateVal / 100) }));
+  }, [fields.commission_type, fields.basic_premium, structRateVal]);
 
   useEffect(() => {
     // Total = the standard breakdown, plus the Special Commission for a Special type.
@@ -565,7 +614,8 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
      table + commission type; the endorsement records the resulting commission change. */
   const commissionOf = (basic, srcc, tc) => {
     const rate = rateFor(commissionSchedules, fields.product, fields.main_class, dates.policy_period_from);
-    return basic * rate.basic / 100 + srcc * rate.srcc / 100 + tc * rate.tc / 100;
+    const basicPct = structRateVal != null ? structRateVal : rate.basic;
+    return basic * basicPct / 100 + srcc * rate.srcc / 100 + tc * rate.tc / 100;
   };
   const endoCommissionChange = (draft) => {
     const oldC = commissionOf(num(fields.basic_premium), num(fields.srcc_premium), num(fields.tc_premium));
@@ -1436,7 +1486,15 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
 
         {/* ── Commission ───────────────────────────────────── */}
         <SectionHeader title="Commission" />
-        {autoCommission && (() => {
+        {usesStructure && (
+          <Box sx={{ mb: 1.5, px: 1.5, py: 1, borderRadius: '8px', bgcolor: 'rgba(8,145,178,0.07)', border: '1px solid rgba(8,145,178,0.22)' }}>
+            <Typography sx={{ fontSize: 12, color: '#0e7490', fontWeight: 700 }}>
+              Commission Structure — {fields.product}: {structHit ? `Year ${structYear} rate ${structRateVal}%` : 'past the end of the scale (0%)'} (declining scale, from the original policy start date).
+              {' '}{fields.commission_type === 'Special' ? 'Special Commission = this rate × basic premium.' : 'Used as the Basic Commission %; SRCC / TC from the rate table.'}
+            </Typography>
+          </Box>
+        )}
+        {autoCommission && !usesStructure && (() => {
           const rate = rateFor(commissionSchedules, fields.product, fields.main_class, dates.policy_period_from);
           return (
             <Box sx={{ mb: 1.5, px: 1.5, py: 1, borderRadius: '8px', bgcolor: 'rgba(236,72,153,0.06)', border: '1px solid rgba(236,72,153,0.18)' }}>
@@ -1446,7 +1504,7 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
             </Box>
           );
         })()}
-        {fields.commission_type === 'Special' && (
+        {fields.commission_type === 'Special' && !usesStructure && (
           <Box sx={{ mb: 1.5, px: 1.5, py: 1, borderRadius: '8px', bgcolor: 'rgba(37,94,171,0.06)', border: '1px solid rgba(37,94,171,0.18)' }}>
             <Typography sx={{ fontSize: 12, color: '#255EAB', fontWeight: 600 }}>
               Enter the Special Commission by hand. Any Basic / SRCC / TC you fill in are added on top — Total = Special + Basic + SRCC + TC.
@@ -1461,10 +1519,11 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
             // uses the flat Special Commission amount instead.
             .filter(f => f.name === 'commission_pct' ? fields.commission_type !== 'Special' : true)
             .map(f => {
-              // Standard derives Basic/SRCC/TC from the rate table (locked). Special
-              // leaves them manual so they can be entered by hand.
-              const locked = fields.commission_type === 'Standard'
-                && ['commission_basic', 'commission_srcc', 'commission_tc', 'commission_pct'].includes(f.name);
+              // Standard derives Basic/SRCC/TC from the rate table (locked). Special is
+              // manual, unless a commission structure drives its Special Commission.
+              const locked = (fields.commission_type === 'Standard'
+                  && ['commission_basic', 'commission_srcc', 'commission_tc', 'commission_pct'].includes(f.name))
+                || (usesStructure && f.name === 'commission_special');
               return (
                 <Grid item xs={12} sm={6} md={4} key={f.name}>
                   {renderStaticField(locked ? { ...f, readOnly: true } : f)}
