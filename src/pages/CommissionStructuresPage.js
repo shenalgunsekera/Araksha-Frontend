@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { PRODUCTS } from '../config/products';
-import { expandLadder, totalMonths, structureRate } from '../utils/commissionStructures';
+import { expandLadder, totalMonths, structureRate, rateAtMonths } from '../utils/commissionStructures';
 
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -121,9 +121,10 @@ export default function CommissionStructuresPage() {
   const scaleFor = (c, segs) => {
     const root = c.root_policy_id ? (byId[c.root_policy_id] || c) : c;
     const cur = structureRate(segs, root.policy_period_from, c.policy_period_from);
-    const nxt = structureRate(segs, root.policy_period_from, c.policy_period_to);
+    const curMonths = cur ? cur.months : 0;
+    const nxt = rateAtMonths(segs, curMonths + 12); // the rate one year on (next renewal)
     return {
-      year: cur ? Math.floor(cur.months / 12) + 1 : null,
+      year: Math.floor(curMonths / 12) + 1,
       rate: cur ? cur.rate : 0,
       nextRate: nxt ? nxt.rate : 0,
     };

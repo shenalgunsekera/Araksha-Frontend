@@ -39,8 +39,10 @@ export function rateAtMonths(segments, months) {
 // Rate for a policy given the ORIGINAL policy start date and THIS policy's start date.
 // Returns { rate, index, startMonth, months } or null (no scale / past the end).
 export function structureRate(segments, originalStart, thisStart) {
-  const months = monthsBetween(originalStart, thisStart);
-  if (months === null) return null;
+  // No / invalid dates → treat the policy as being at the START of the schedule
+  // (Year 1), so a fresh policy uses the first year's rate instead of nothing.
+  const m = monthsBetween(originalStart, thisStart);
+  const months = m === null ? 0 : m;
   const hit = rateAtMonths(segments, months);
   return hit ? { ...hit, months } : null;
 }
