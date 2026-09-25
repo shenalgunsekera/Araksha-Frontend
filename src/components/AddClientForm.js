@@ -484,7 +484,7 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
   const freshDraft = () => ({
     effective_date: '', type: ENDORSEMENT_TYPES[0], description: '',
     basic_premium_change: '', srcc_premium_change: '', tc_premium_change: '',
-    total_premium_change: '', sum_insured_change: '', amount_paid: '', documents: [],
+    total_premium_change: '', sum_insured_change: '', amount_paid: '', amount_paid_date: '', documents: [],
   });
   const [endoDraft, setEndoDraft] = useState(() => freshDraft());
   // Which endorsement's Amount Paid is being edited inline ({ id, value }).
@@ -670,6 +670,7 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
       sum_insured_change:   String(num(endoDraft.sum_insured_change)),
       commission_change:    String(endoCommissionChange(endoDraft)),
       amount_paid:          String(num(endoDraft.amount_paid)),
+      amount_paid_date:     endoDraft.amount_paid_date || '',
       documents: endoDraft.documents,
       created_at: new Date().toISOString(),
       created_by: userProfile?.full_name || user?.email?.split('@')[0] || 'Unknown',
@@ -691,10 +692,10 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
     setEndoError('');
   };
 
-  // Edit an existing endorsement's Amount Paid. The policy total recomputes from
-  // the ledger + all endorsement payments, so nothing else needs updating here.
-  const setEndorsementPaid = (id, raw) =>
-    setEndorsements(list => list.map(e => (e.id === id ? { ...e, amount_paid: String(num(raw)) } : e)));
+  // Edit an existing endorsement's Amount Paid + Paid Date. The policy total
+  // recomputes from the ledger + all endorsement payments, so nothing else changes.
+  const setEndorsementPaid = (id, raw, paidDate) =>
+    setEndorsements(list => list.map(e => (e.id === id ? { ...e, amount_paid: String(num(raw)), amount_paid_date: paidDate || '' } : e)));
 
   const deleteEndorsement = (id) =>
     setEndorsements(list => list.filter(e => e.id !== id).map((e, i) => ({ ...e, endorsement_no: i + 1 })));
@@ -1730,24 +1731,27 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
                               ))}
                             </Box>
                           )}
-                          {/* Amount Paid — editable; rolls into the policy's Amount Received */}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.8 }}>
+                          {/* Amount Paid + Paid Date — editable; rolls into the policy's Amount Received */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.8, flexWrap: 'wrap' }}>
                             {editingPaid && editingPaid.id === e.id ? (
                               <>
                                 <NumericField label="Amount Paid" value={editingPaid.value} autoFocus
                                   onChange={ev => setEditingPaid(p => ({ ...p, value: ev.target.value }))}
-                                  size="small" sx={{ maxWidth: 170, '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: 12.5 } }} />
-                                <IconButton size="small" onClick={() => { setEndorsementPaid(e.id, editingPaid.value); setEditingPaid(null); }} sx={{ color: '#059669' }}><CheckCircleOutlinedIcon sx={{ fontSize: 18 }} /></IconButton>
+                                  size="small" sx={{ maxWidth: 150, '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: 12.5 } }} />
+                                <TextField type="date" label="Paid Date" InputLabelProps={{ shrink: true }} value={editingPaid.date}
+                                  onChange={ev => setEditingPaid(p => ({ ...p, date: ev.target.value }))}
+                                  size="small" sx={{ maxWidth: 160, '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: 12.5 } }} />
+                                <IconButton size="small" onClick={() => { setEndorsementPaid(e.id, editingPaid.value, editingPaid.date); setEditingPaid(null); }} sx={{ color: '#059669' }}><CheckCircleOutlinedIcon sx={{ fontSize: 18 }} /></IconButton>
                                 <IconButton size="small" onClick={() => setEditingPaid(null)} sx={{ color: '#9CA3AF' }}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
                               </>
                             ) : (
                               <>
                                 <Box sx={{ px: 1, py: 0.4, borderRadius: '7px', bgcolor: num(e.amount_paid) ? 'rgba(5,150,105,0.08)' : 'rgba(148,163,184,0.10)', border: `1px solid ${num(e.amount_paid) ? 'rgba(5,150,105,0.25)' : 'rgba(148,163,184,0.25)'}` }}>
                                   <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: num(e.amount_paid) ? '#059669' : '#9CA3AF' }}>
-                                    Paid: LKR {num(e.amount_paid).toLocaleString()}
+                                    Paid: LKR {num(e.amount_paid).toLocaleString()}{e.amount_paid_date ? ` · ${e.amount_paid_date}` : ''}
                                   </Typography>
                                 </Box>
-                                <IconButton size="small" onClick={() => setEditingPaid({ id: e.id, value: e.amount_paid || '' })} sx={{ color: '#7c3aed' }}><EditOutlinedIcon sx={{ fontSize: 16 }} /></IconButton>
+                                <IconButton size="small" onClick={() => setEditingPaid({ id: e.id, value: e.amount_paid || '', date: e.amount_paid_date || '' })} sx={{ color: '#7c3aed' }}><EditOutlinedIcon sx={{ fontSize: 16 }} /></IconButton>
                               </>
                             )}
                           </Box>
@@ -1803,6 +1807,11 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
                 <Grid item xs={12} sm={6} md={3}>
                   <NumericField label="Amount Paid (optional)" value={endoDraft.amount_paid} onChange={e => setEndoDraft(d => ({ ...d, amount_paid: e.target.value }))} fullWidth size="small"
                     helperText="Adds to the policy's Amount Received"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField type="date" label="Paid Date" InputLabelProps={{ shrink: true }} value={endoDraft.amount_paid_date}
+                    onChange={e => setEndoDraft(d => ({ ...d, amount_paid_date: e.target.value }))} fullWidth size="small"
                     sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: 13 } }} />
                 </Grid>
                 <Grid item xs={12}>

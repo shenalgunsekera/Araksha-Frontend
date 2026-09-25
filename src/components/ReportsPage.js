@@ -182,6 +182,7 @@ const ENDORSEMENT_FIELDS = [
   { key: 'sum_insured_change',   label: 'Sum Insured Δ',    type: 'number' },
   { key: 'commission_change',    label: 'Commission Δ',     type: 'number' },
   { key: 'amount_paid',          label: 'Amount Paid',      type: 'number' },
+  { key: 'amount_paid_date',     label: 'Paid Date',        type: 'date'   },
   { key: 'documents_count',      label: 'Documents',        type: 'number' },
   // Audit
   { key: 'created_by',         label: 'Recorded By',        type: 'string' },
@@ -973,7 +974,7 @@ const ReportsPage = () => {
         tc_premium_change:eNum(e.tc_premium_change), net_premium_change:eNum(e.net_premium_change),
         total_premium_change:(eNum(e.total_premium_change)||0)+(eNum(e.premium_change)||0)||'',
         sum_insured_change:eNum(e.sum_insured_change), commission_change:eNum(e.commission_change),
-        amount_paid:eNum(e.amount_paid), documents_count:Array.isArray(e.documents)?e.documents.length:0,
+        amount_paid:eNum(e.amount_paid), amount_paid_date:e.amount_paid_date||'', documents_count:Array.isArray(e.documents)?e.documents.length:0,
         created_by:e.created_by||'', created_at:e.created_at||'',
       }));
     });
@@ -997,7 +998,7 @@ const ReportsPage = () => {
       (Array.isArray(c.endorsements)?c.endorsements:[]).forEach(e=>{
         if(!eNum(e.amount_paid)) return;
         pRows.push({ id:`${d.id}_endopay_${e.id||e.endorsement_no}`, ...ctx, source_type:`Endorsement #${e.endorsement_no||''}`.trim(),
-          payment_no:'', amount_received:eNum(e.amount_paid), payment_date:e.effective_date||e.created_at||'',
+          payment_no:'', amount_received:eNum(e.amount_paid), payment_date:e.amount_paid_date||e.effective_date||e.created_at||'',
           payment_method:'', cheque_slip_no:'', receipt_no:'', debit_note_no:'', debit_note_date:'' });
       });
     });
@@ -1539,7 +1540,12 @@ const ReportsPage = () => {
                     return(
                       <Box key={i} sx={{p:1.5,border:'1px solid rgba(0,0,0,0.08)',borderRadius:'8px'}}>
                         <Stack direction="row" spacing={0.5} alignItems="center" sx={{mb:0.8}}>
-                          <FormControl size="small" sx={{flex:1}}><Select value={f.field} onChange={e=>setFilters(p=>p.map((ff,idx)=>idx===i?{field:e.target.value,op:'equals',value:''}:ff))}>{sourceFields.map(sf=><MenuItem key={sf.key} value={sf.key} sx={{fontSize:12}}>{sf.label}</MenuItem>)}</Select></FormControl>
+                          <Autocomplete size="small" disableClearable options={sourceFields}
+                            getOptionLabel={o=>o.label||''} value={fd||null}
+                            isOptionEqualToValue={(o,v)=>o.key===v.key}
+                            onChange={(_,val)=>{ if(val) setFilters(p=>p.map((ff,idx)=>idx===i?{field:val.key,op:'equals',value:''}:ff)); }}
+                            sx={{flex:1}}
+                            renderInput={(params)=><TextField {...params} placeholder="Search field…" sx={{'& input':{fontSize:12}}}/>}/>
                           <IconButton size="small" onClick={()=>setFilters(p=>p.filter((_,idx)=>idx!==i))} sx={{color:'#9CA3AF'}}><DeleteOutlineIcon fontSize="small"/></IconButton>
                         </Stack>
                         <Stack direction="row" spacing={0.5} flexWrap="wrap">

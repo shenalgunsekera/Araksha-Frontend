@@ -525,10 +525,10 @@ const ClientDetailsModal = ({ client, onClose }) => {
         autoTable(pdf, {
           startY: y,
           head: [[
-            { content: 'ENDORSEMENT LOG', colSpan: 8, styles: { fillColor: [10,26,62], textColor: [56,163,224], fontStyle: 'bold', fontSize: 8.5, cellPadding: { top:3.5, bottom:3.5, left:6, right:6 } } },
+            { content: 'ENDORSEMENT LOG', colSpan: 9, styles: { fillColor: [10,26,62], textColor: [56,163,224], fontStyle: 'bold', fontSize: 8.5, cellPadding: { top:3.5, bottom:3.5, left:6, right:6 } } },
           ], [
             { content: '#' }, { content: 'Effective' }, { content: 'Type' }, { content: 'Description' },
-            { content: 'Sum Insured' }, { content: 'Premium' }, { content: 'Commission' }, { content: 'Paid' },
+            { content: 'Sum Insured' }, { content: 'Premium' }, { content: 'Commission' }, { content: 'Paid' }, { content: 'Paid Date' },
           ]],
           body: endorsements.map(e => {
             const premChange = endoNum(e.total_premium_change) + endoNum(e.premium_change);
@@ -541,10 +541,11 @@ const ClientDetailsModal = ({ client, onClose }) => {
               premChange ? fmtSigned(premChange) : '—',
               endoNum(e.commission_change) ? fmtSigned(endoNum(e.commission_change)) : '—',
               endoNum(e.amount_paid) ? fmtLKR(endoNum(e.amount_paid)) : '—',
+              e.amount_paid_date || '—',
             ];
           }),
           headStyles: { fillColor: [124,58,237], textColor: [255,255,255], fontStyle: 'bold', fontSize: 7.5 },
-          columnStyles: { 0:{cellWidth:8, halign:'center'}, 1:{cellWidth:22}, 2:{cellWidth:28}, 4:{halign:'right'}, 5:{halign:'right'}, 6:{halign:'right'}, 7:{halign:'right'} },
+          columnStyles: { 0:{cellWidth:8, halign:'center'}, 1:{cellWidth:20}, 2:{cellWidth:26}, 4:{halign:'right'}, 5:{halign:'right'}, 6:{halign:'right'}, 7:{halign:'right'}, 8:{cellWidth:20} },
           styles: { fontSize: 8, cellPadding: { top:3, bottom:3, left:5, right:5 }, lineColor: [225,215,245], lineWidth: 0.1, overflow: 'linebreak' },
           bodyStyles: { fillColor: [255,255,255] },
           alternateRowStyles: { fillColor: [250,248,255] },
@@ -749,14 +750,14 @@ const ClientDetailsModal = ({ client, onClose }) => {
         es.columns = [
           { header: '#', width: 6 }, { header: 'Effective Date', width: 16 }, { header: 'Type', width: 24 },
           { header: 'Description', width: 50 }, { header: 'Sum Insured Δ', width: 16 }, { header: 'Premium Δ', width: 16 },
-          { header: 'Commission Δ', width: 16 }, { header: 'Amount Paid', width: 16 }, { header: 'Recorded By', width: 20 },
+          { header: 'Commission Δ', width: 16 }, { header: 'Amount Paid', width: 16 }, { header: 'Paid Date', width: 16 }, { header: 'Recorded By', width: 20 },
         ];
         es.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
         es.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C3AED' } };
         endorsements.forEach(e => {
           es.addRow([
             e.endorsement_no, e.effective_date || '', e.type || '', e.description || '',
-            endoNum(e.sum_insured_change) || '', (endoNum(e.total_premium_change) + endoNum(e.premium_change)) || '', endoNum(e.commission_change) || '', endoNum(e.amount_paid) || '', e.created_by || '',
+            endoNum(e.sum_insured_change) || '', (endoNum(e.total_premium_change) + endoNum(e.premium_change)) || '', endoNum(e.commission_change) || '', endoNum(e.amount_paid) || '', e.amount_paid_date || '', e.created_by || '',
           ]);
         });
         es.addRow([]);
@@ -1124,7 +1125,7 @@ const ClientDetailsModal = ({ client, onClose }) => {
                         <Box sx={{ display:'flex', gap:2, mt:0.6, flexWrap:'wrap' }}>
                           {premChange !== 0 && <Typography sx={{ fontSize:11.5, fontWeight:700, color:'#255EAB' }}>Premium {fmtSigned(premChange)}</Typography>}
                           {endoNum(e.sum_insured_change) !== 0 && <Typography sx={{ fontSize:11.5, fontWeight:600, color:'#0891b2' }}>Sum Insured {fmtSigned(endoNum(e.sum_insured_change))}</Typography>}
-                          {endoNum(e.amount_paid) !== 0 && <Typography sx={{ fontSize:11.5, fontWeight:700, color:'#059669' }}>Paid {fmtLKR(endoNum(e.amount_paid))}</Typography>}
+                          {endoNum(e.amount_paid) !== 0 && <Typography sx={{ fontSize:11.5, fontWeight:700, color:'#059669' }}>Paid {fmtLKR(endoNum(e.amount_paid))}{e.amount_paid_date ? ` · ${e.amount_paid_date}` : ''}</Typography>}
                         </Box>
                       </Box>
                       <ExpandMoreIcon sx={{ fontSize:22, color:'#7c3aed', flexShrink:0, transition:'transform .2s', transform: open ? 'rotate(180deg)' : 'none' }} />
@@ -1139,6 +1140,12 @@ const ClientDetailsModal = ({ client, onClose }) => {
                               <Typography sx={{ fontSize:12.5, fontWeight:700, color }}>{label === 'Amount Paid' ? fmtLKR(v) : fmtSigned(v)}</Typography>
                             </Box>
                           ))}
+                          {e.amount_paid_date && (
+                            <Box>
+                              <Typography sx={{ fontSize:9.5, fontWeight:700, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:0.4 }}>Paid Date</Typography>
+                              <Typography sx={{ fontSize:12.5, fontWeight:700, color:'#059669' }}>{e.amount_paid_date}</Typography>
+                            </Box>
+                          )}
                         </Box>
                         {Array.isArray(e.documents) && e.documents.length > 0 && (
                           <Box sx={{ display:'flex', gap:1, mt:1.2, flexWrap:'wrap' }}>
