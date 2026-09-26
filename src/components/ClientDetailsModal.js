@@ -1002,8 +1002,9 @@ const ClientDetailsModal = ({ client, onClose }) => {
             <Grid item xs={12} sm={6} md={4}><Field label="Commission Type"         value={client.commission_type} /></Grid>
             {isSpecial ? (
               <>
-                <Grid item xs={12} sm={6} md={4}><Field label="Special Commission %"     value={client.commission_special_pct ? `${client.commission_special_pct}%` : ''} /></Grid>
-                <Grid item xs={12} sm={6} md={4}><Field label="Special Commission Amount" value={fmtLKR(lc.commission_special)} /></Grid>
+                <Grid item xs={12} sm={6} md={4}><Field label="Special Basic %" value={client.commission_special_pct ? `${client.commission_special_pct}%` : ''} /></Grid>
+                <Grid item xs={12} sm={6} md={4}><Field label="Special SRCC %"  value={client.commission_special_srcc_pct ? `${client.commission_special_srcc_pct}%` : ''} /></Grid>
+                <Grid item xs={12} sm={6} md={4}><Field label="Special TC %"    value={client.commission_special_tc_pct ? `${client.commission_special_tc_pct}%` : ''} /></Grid>
               </>
             ) : (
               <Grid item xs={12} sm={6} md={4}><Field label="Basic Commission %"    value={lc.commission_pct} /></Grid>
