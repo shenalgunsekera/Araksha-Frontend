@@ -208,7 +208,8 @@ export const textFields = [
   // Commission
   { label: 'Commission Type',    name: 'commission_type',    section: 'Commission', dropdown: true },
   { label: 'Basic Commission %', name: 'commission_pct',     section: 'Commission', type: 'number' },
-  { label: 'Special Commission', name: 'commission_special', section: 'Commission', type: 'number' },
+  { label: 'Special Commission %',      name: 'commission_special_pct', section: 'Commission', type: 'number' },
+  { label: 'Special Commission (Amount)', name: 'commission_special', section: 'Commission', type: 'number' },
   { label: 'Commission Basic',   name: 'commission_basic',   section: 'Commission', type: 'number' },
   { label: 'Commission SRCC',    name: 'commission_srcc',    section: 'Commission', type: 'number' },
   { label: 'Commission TC',      name: 'commission_tc',      section: 'Commission', type: 'number' },
@@ -426,6 +427,12 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
         obj.commission_pct = '';
       }
     }
+    // Special Commission is entered as a % (of the basic premium). For older records
+    // that only stored the amount, back-derive the equivalent % so editing shows it.
+    if (obj.commission_type === 'Special' && !num(obj.commission_special_pct)
+        && num(obj.commission_special) && num(obj.basic_premium)) {
+      obj.commission_special_pct = String(Math.round(num(obj.commission_special) / num(obj.basic_premium) * 10000) / 100);
+    }
     return obj;
   });
 
@@ -594,15 +601,21 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
   }, [autoCommission, fields.commission_type, fields.main_class, fields.product, fields.basic_premium,
       fields.srcc_premium, fields.tc_premium, dates.policy_period_from, commissionSchedules, structRateVal]);
 
-  // Special commission with a structure: the scale rate is the special commission
-  // rate (× basic premium). Without a structure, Special stays fully manual.
+  // Special Commission Amount = basic premium × the entered Special Commission %.
+  // This derived amount is what feeds the total, reports and exports.
+  useEffect(() => {
+    if (fields.commission_type !== 'Special') return;
+    setFields(f => ({ ...f, commission_special: roundMoney(num(f.basic_premium) * num(f.commission_special_pct) / 100) }));
+  }, [fields.commission_type, fields.basic_premium, fields.commission_special_pct]);
+
+  // A commission structure drives the Special Commission % for the policy's year.
   useEffect(() => {
     if (fields.commission_type !== 'Special' || structRateVal == null) return;
-    setFields(f => ({ ...f, commission_special: roundMoney(num(f.basic_premium) * structRateVal / 100) }));
-  }, [fields.commission_type, fields.basic_premium, structRateVal]);
+    setFields(f => ({ ...f, commission_special_pct: String(structRateVal) }));
+  }, [fields.commission_type, structRateVal]);
 
   useEffect(() => {
-    // Total = the standard breakdown, plus the Special Commission for a Special type.
+    // Total = the standard breakdown, plus the Special Commission amount for a Special type.
     const total = num(fields.commission_basic) + num(fields.commission_srcc) + num(fields.commission_tc)
                 + (fields.commission_type === 'Special' ? num(fields.commission_special) : 0);
     setFields(f => ({ ...f, commission_total: total !== 0 ? String(Math.round(total * 100) / 100) : '' }));
@@ -883,8 +896,8 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
     if (fields.commission_type === 'Standard' && !num(fields.commission_total)) {
       setError('Total Commission is required for a Standard commission'); return;
     }
-    if (fields.commission_type === 'Special' && !num(fields.commission_special)) {
-      setError('Special Commission is required for a Special commission'); return;
+    if (fields.commission_type === 'Special' && !num(fields.commission_special_pct)) {
+      setError('Special Commission % is required for a Special commission'); return;
     }
     setSaving(true);
     try {
@@ -1528,23 +1541,24 @@ const AddClientForm = ({ onSuccess, onCancel, initialData = {}, isEdit = false, 
         {fields.commission_type === 'Special' && !usesStructure && (
           <Box sx={{ mb: 1.5, px: 1.5, py: 1, borderRadius: '8px', bgcolor: 'rgba(37,94,171,0.06)', border: '1px solid rgba(37,94,171,0.18)' }}>
             <Typography sx={{ fontSize: 12, color: '#255EAB', fontWeight: 600 }}>
-              Enter the Special Commission by hand. Any Basic / SRCC / TC you fill in are added on top — Total = Special + Basic + SRCC + TC.
+              Enter the Special Commission as a % — the amount (basic premium × %) is worked out for you. Any Basic / SRCC / TC you add are on top: Total = Special + Basic + SRCC + TC.
             </Typography>
           </Box>
         )}
         <Grid container spacing={2} sx={{ mb: 2.5 }}>
           {textFields.filter(f => f.section === 'Commission')
-            // The single Special Commission shows only for a Special type.
-            .filter(f => f.name === 'commission_special' ? fields.commission_type === 'Special' : true)
+            // Special Commission % and its derived amount show only for a Special type.
+            .filter(f => (f.name === 'commission_special' || f.name === 'commission_special_pct') ? fields.commission_type === 'Special' : true)
             // Basic Commission % is a Standard-only rate — hidden for Special, which
-            // uses the flat Special Commission amount instead.
+            // uses the Special Commission % instead.
             .filter(f => f.name === 'commission_pct' ? fields.commission_type !== 'Special' : true)
             .map(f => {
-              // Standard derives Basic/SRCC/TC from the rate table (locked). Special is
-              // manual, unless a commission structure drives its Special Commission.
+              // Standard derives Basic/SRCC/TC from the rate table (locked). For Special,
+              // the amount is always derived from the %; a structure also locks the %.
               const locked = (fields.commission_type === 'Standard'
                   && ['commission_basic', 'commission_srcc', 'commission_tc', 'commission_pct'].includes(f.name))
-                || (usesStructure && f.name === 'commission_special');
+                || f.name === 'commission_special'
+                || (usesStructure && f.name === 'commission_special_pct');
               return (
                 <Grid item xs={12} sm={6} md={4} key={f.name}>
                   {renderStaticField(locked ? { ...f, readOnly: true } : f)}
