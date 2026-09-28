@@ -89,7 +89,11 @@ const CLIENT_FIELDS = (() => {
   const skip = new Set(['date_added', 'policy_year', 'policy_month']);
   const base = UW_FIELDS.filter(f => !skip.has(f.name)).map(f => ({ key: f.name, label: f.label, type: uwType(f) }));
   const have = new Set(base.map(f => f.key));
-  const derived = [{ key: 'policy_status', label: 'Policy Status (Active / Expired)', type: 'string' }];
+  const derived = [
+    { key: 'policy_status',       label: 'Policy Status (Active / Expired)', type: 'string' },
+    { key: 'commission_received', label: 'Commission Received (Yes / No)',    type: 'string' },
+    { key: 'payment_received',    label: 'Premium Received (Yes / No)',       type: 'string' },
+  ];
   return [...base, ...derived, ...CLIENT_SYSTEM_FIELDS.filter(f => !have.has(f.key))];
 })();
 // keys to hide from the dynamic field list (internal / file URLs / JSON blobs)
@@ -198,6 +202,8 @@ const PAYMENT_FIELDS = [
   { key: 'product',            label: 'Product',            type: 'string' },
   { key: 'main_class',         label: 'Main Class',         type: 'string' },
   { key: 'insurance_provider', label: 'Insurer',            type: 'string' },
+  { key: 'customer_type',      label: 'Customer Type',      type: 'string' },
+  { key: 'new_renewal',        label: 'New / Renewal',      type: 'string' },
   { key: 'payment_status',     label: 'Payment Status',     type: 'string' },
   { key: 'payment_no',         label: 'Payment No',         type: 'number' },
   { key: 'amount_received',    label: 'Amount Received',    type: 'number' },
@@ -956,12 +962,12 @@ const ReportsPage = () => {
     // Commissions tab; passed to liveCommission so reports use the rate that was
     // in force at each policy's start date. Falls back to per-class defaults.
     const schedules = (rateSnap.exists() && rateSnap.data().products) || {};
+    const eNum = (v)=>{ const x=parseFloat(String(v??'').replace(/,/g,'')); return isNaN(x)?'':x; };
     // Compute O/S Days live (counts up from policy start, 0 once paid) so reports
     // never show the stale stored snapshot or a leftover value on paid policies.
-    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, ...liveCommission(c, schedules), os_days: liveOsDays(c), policy_status: policyStatus(c), customer_type: normCustomerType(c.customer_type), new_renewal: c.new_renewal || ((c.main_class==='Marine'||/marine/i.test(c.product||''))?'New':'')}; }));
+    setClients(cS.docs.map(d=>{ const c={id:d.id,...d.data()}; return {...c, ...liveCommission(c, schedules), os_days: liveOsDays(c), policy_status: policyStatus(c), customer_type: normCustomerType(c.customer_type), new_renewal: c.new_renewal || ((c.main_class==='Marine'||/marine/i.test(c.product||''))?'New':''), commission_received: (Number(eNum(c.commission_amount_paid))||0) > 0 ? 'Yes' : 'No', payment_received: (Number(eNum(c.amount_received))||0) > 0 ? 'Yes' : 'No'}; }));
     // Flatten every policy's endorsements into their own report rows (with policy
     // context) so endorsements can be filtered / grouped / summed / charted.
-    const eNum = (v)=>{ const x=parseFloat(String(v??'').replace(/,/g,'')); return isNaN(x)?'':x; };
     const eRows=[];
     cS.docs.forEach(d=>{
       const c=d.data(); const list=Array.isArray(c.endorsements)?c.endorsements:[];
@@ -986,7 +992,8 @@ const ReportsPage = () => {
     cS.docs.forEach(d=>{
       const c=d.data();
       const ctx={ policy_client_name:c.client_name||'', policy_no:c.policy_no||'', araksha_ib_file_no:c.araksha_ib_file_no||'',
-        product:c.product||'', main_class:c.main_class||'', insurance_provider:c.insurance_provider||'', payment_status:c.payment_status||'' };
+        product:c.product||'', main_class:c.main_class||'', insurance_provider:c.insurance_provider||'', payment_status:c.payment_status||'',
+        customer_type:normCustomerType(c.customer_type), new_renewal:c.new_renewal || ((c.main_class==='Marine'||/marine/i.test(c.product||''))?'New':'') };
       const ledger=Array.isArray(c.payments)&&c.payments.length ? c.payments
         : ([{ amount_received:c.amount_received, payment_date:c.payment_date, payment_method:c.payment_method, cheque_slip_no:c.cheque_slip_no, receipt_no:c.receipt_no, debit_note_no:c.debit_note_no, debit_note_date:c.debit_note_date }]
             .filter(p=>Object.values(p).some(v=>v!==''&&v!=null)));
