@@ -256,7 +256,23 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
     description:   claim.description     || '',
   });
   const setC = (k, v) => setCore(c => ({ ...c, [k]: v }));
-  const s = STATUS_CONFIG[claim.status] || STATUS_CONFIG['Filed'];
+  // The status must always reflect the furthest completed tracker step. Use the
+  // stored status only when it's further along, or a manual outcome (Rejected).
+  const trackerStatus = deriveClaimStatus(tracker);
+  const effStatus = status === 'Rejected' ? 'Rejected'
+    : (STATUS_ORDER.indexOf(trackerStatus) > STATUS_ORDER.indexOf(status) ? trackerStatus : (STATUS_ORDER.indexOf(status) >= 0 ? status : trackerStatus));
+  const s = STATUS_CONFIG[effStatus] || STATUS_CONFIG['Filed'];
+
+  // Reconcile a stored status that fell behind its tracker (e.g. the tracker was
+  // filled during registration, or before auto-advance existed) — once, on open.
+  useEffect(() => {
+    if (status !== 'Rejected' && STATUS_ORDER.indexOf(trackerStatus) > STATUS_ORDER.indexOf(status)) {
+      setStatus(trackerStatus);
+      onUpdate?.(claim.id, { status: trackerStatus });
+      updateDoc(doc(db, 'claims', claim.id), { status: trackerStatus, updated_at: serverTimestamp() }).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const filed = claim.created_at?.toDate?.()
     ? claim.created_at.toDate().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
     : '—';
@@ -323,7 +339,7 @@ function ClaimCard({ claim, onUpdate, onDelete, defaultOpen = false }) {
               {claim.claim_ref_id && (
                 <Chip label={`Ref: ${claim.claim_ref_id}`} size="small" sx={{ bgcolor:'rgba(37,94,171,0.10)', color:'#255EAB', fontWeight:700, fontSize:10.5 }} />
               )}
-              <Chip label={claim.status} size="small" sx={{ bgcolor:s.bg, color:s.color, fontWeight:700, fontSize:10.5 }} />
+              <Chip label={effStatus} size="small" sx={{ bgcolor:s.bg, color:s.color, fontWeight:700, fontSize:10.5 }} />
             </Stack>
             <Typography sx={{ fontSize:12, color:'#9CA3AF' }}>
               {claim.client_name} · {claim.policy_no} · Filed: {filed}
@@ -460,7 +476,7 @@ const ClaimsPage = () => {
     const ref = `CLM-${Date.now().toString().slice(-6)}`;
     const claimRef = newClaimRef || doc(collection(db,'claims'));
     await setDoc(claimRef, {
-      ...form, reference:ref, status:'Filed', process_tracker: regTracker,
+      ...form, reference:ref, status: deriveClaimStatus(regTracker), process_tracker: regTracker,
       created_by: user?.uid||'', created_by_name: userProfile?.full_name||'',
       created_at: serverTimestamp(), updated_at: serverTimestamp(),
     });
