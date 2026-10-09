@@ -1102,20 +1102,29 @@ const ReportsPage = () => {
 
   // Distinct values actually present in the data for a field, so filter values
   // can be picked from a dropdown instead of typed blind.
-  const distinctValues = useCallback((fieldKey) => {
+  // Returns a cached resolver so each field's options array keeps a STABLE identity
+  // across renders — otherwise the value Autocomplete resets its list while you type
+  // and intermittently shows "no options". The cache resets only when data/source change.
+  const distinctValues = useMemo(() => {
     const base = source === 'clients' ? clients : source === 'claims' ? claims : source === 'endorsements' ? endoRows : source === 'payments' ? payRows : quotes;
-    const set = new Set();
-    for (const row of base) {
-      let v = row?.[fieldKey];
-      if (v === null || v === undefined || v === '') continue;
-      if (typeof v === 'object') { v = v.toDate ? v.toDate().toISOString().slice(0, 10) : null; }
-      if (v === null) continue;
-      set.add(String(v));
-      if (set.size > 300) break;
-    }
-    // Customer type always offers the full canonical set, even if some aren't in the data yet.
-    if (fieldKey === 'customer_type') CUSTOMER_TYPES.forEach(t => set.add(t));
-    return [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const cache = {};
+    return (fieldKey) => {
+      if (cache[fieldKey]) return cache[fieldKey];
+      const set = new Set();
+      for (const row of base) {
+        let v = row?.[fieldKey];
+        if (v === null || v === undefined || v === '') continue;
+        if (typeof v === 'object') { v = v.toDate ? v.toDate().toISOString().slice(0, 10) : null; }
+        if (v === null) continue;
+        set.add(String(v));
+        if (set.size > 2000) break;
+      }
+      // Customer type always offers the full canonical set, even if some aren't in the data yet.
+      if (fieldKey === 'customer_type') CUSTOMER_TYPES.forEach(t => set.add(t));
+      const arr = [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      cache[fieldKey] = arr;
+      return arr;
+    };
   }, [source, clients, claims, quotes, endoRows, payRows]);
 
   // Compute report results from an explicit config + the current datasets/period.
