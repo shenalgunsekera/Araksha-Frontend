@@ -10,6 +10,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
+import { currentYear, ledgerRows, premiumToAnniversary, ageOn, num as wsNum } from '../utils/worksite';
 import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend, ResponsiveContainer
@@ -216,6 +217,71 @@ const PAYMENT_FIELDS = [
   { key: 'source_type',        label: 'Payment Source',     type: 'string' },
 ];
 
+// Worksite (voluntary group) schemes — one row per enrolled member.
+const WORKSITE_MEMBER_FIELDS = [
+  { key: 'company_name',          label: 'Company',               type: 'string' },
+  { key: 'product_name',          label: 'Product',               type: 'string' },
+  { key: 'product_type',          label: 'Product Type',          type: 'string' },
+  { key: 'insurer',               label: 'Insurer',               type: 'string' },
+  { key: 'master_policy_no',      label: 'Master Policy No',      type: 'string' },
+  { key: 'scheme_status',         label: 'Scheme Status',         type: 'string' },
+  { key: 'anniversary',           label: 'Anniversary',           type: 'date'   },
+  { key: 'full_name',             label: 'Member Name',           type: 'string' },
+  { key: 'nic',                   label: 'NIC',                   type: 'string' },
+  { key: 'employee_no',           label: 'Employee No',           type: 'string' },
+  { key: 'dob',                   label: 'Date of Birth',         type: 'date'   },
+  { key: 'age',                   label: 'Age',                   type: 'number' },
+  { key: 'gender',                label: 'Gender',                type: 'string' },
+  { key: 'mobile',                label: 'Mobile',                type: 'string' },
+  { key: 'email',                 label: 'Email',                 type: 'string' },
+  { key: 'department',            label: 'Department / Branch',   type: 'string' },
+  { key: 'plan',                  label: 'Plan',                  type: 'string' },
+  { key: 'monthly_premium',       label: 'Monthly Premium',       type: 'number' },
+  { key: 'sum_insured',           label: 'Sum Insured',           type: 'number' },
+  { key: 'join_date',             label: 'Join Date',             type: 'date'   },
+  { key: 'batch',                 label: 'Enrolment Batch',       type: 'string' },
+  { key: 'status',                label: 'Member Status',         type: 'string' },
+  { key: 'exit_date',             label: 'Exit / Switch Date',    type: 'date'   },
+  { key: 'exit_reason',           label: 'Exit Reason',           type: 'string' },
+  { key: 'months_to_anniversary', label: 'Months to Anniversary', type: 'number' },
+  { key: 'premium_to_anniversary',label: 'Premium to Anniversary',type: 'number' },
+  { key: 'commission_rate',       label: 'Commission %',          type: 'number' },
+  { key: 'expected_commission',   label: 'Expected Commission',   type: 'number' },
+  { key: 'nominee_name',          label: 'Nominee',               type: 'string' },
+  { key: 'nominee_relationship',  label: 'Nominee Relationship',  type: 'string' },
+  { key: 'source_type',           label: 'Enrolled Via',          type: 'string' },
+];
+
+// Worksite premium & commission ledger — one row per scheme per month.
+const WORKSITE_LEDGER_FIELDS = [
+  { key: 'company_name',          label: 'Company',               type: 'string' },
+  { key: 'product_name',          label: 'Product',               type: 'string' },
+  { key: 'insurer',               label: 'Insurer',               type: 'string' },
+  { key: 'master_policy_no',      label: 'Master Policy No',      type: 'string' },
+  { key: 'policy_year',           label: 'Policy Year',           type: 'string' },
+  { key: 'month',                 label: 'Month',                 type: 'string' },
+  { key: 'month_date',            label: 'Month Start',           type: 'date'   },
+  { key: 'members',               label: 'Members Billed',        type: 'number' },
+  { key: 'payroll_members',       label: 'Payroll Members',       type: 'number' },
+  { key: 'individual_members',    label: 'Individual Payers',     type: 'number' },
+  { key: 'premium_due',           label: 'Premium Due',           type: 'number' },
+  { key: 'remit_by',              label: 'Remit By',              type: 'date'   },
+  { key: 'paid_employer',         label: 'Paid by Employer',      type: 'number' },
+  { key: 'paid_individual',       label: 'Paid by Individuals',   type: 'number' },
+  { key: 'paid_to_insurer',       label: 'Paid to Insurer',       type: 'number' },
+  { key: 'paid_on',               label: 'Paid On',               type: 'date'   },
+  { key: 'insurer_ref',           label: 'Insurer Ref',           type: 'string' },
+  { key: 'arrears',               label: 'Unpaid Premium',        type: 'number' },
+  { key: 'overdue',               label: 'Overdue',               type: 'string' },
+  { key: 'remittance_status',     label: 'Remittance Status',     type: 'string' },
+  { key: 'commission_rate',       label: 'Commission %',          type: 'number' },
+  { key: 'commission_earned',     label: 'Commission Earned',     type: 'number' },
+  { key: 'commission_received',   label: 'Commission Received',   type: 'number' },
+  { key: 'commission_received_date', label: 'Commission Received On', type: 'date' },
+  { key: 'commission_os',         label: 'Commission O/S',        type: 'number' },
+  { key: 'commission_status',     label: 'Commission Status',     type: 'string' },
+];
+
 const NUMBER_OPS = ['sum','avg','min','max','count'];
 const FILTER_OPS = {
   string: ['equals','contains','starts with','not equals'],
@@ -231,8 +297,44 @@ const CT_ALIASES = { 'COMPANY':'Corporate', 'INTERCOMPANY':'Corporate Inhouse', 
 const normCustomerType = (t) => { const s = String(t ?? '').trim(); if (!s) return ''; return CT_ALIASES[s.toUpperCase().replace(/\s+/g,' ')] || s; };
 
 const BUILTIN_TEMPLATES = [
+  { id:'ws_commission_receivable', name:'Worksite — Commission Receivable', description:'Commission earned on premium paid to insurers but not yet received, by scheme and month', icon:'🏢', source:'worksite_ledger', fields:['company_name','product_name','insurer','month','paid_to_insurer','paid_on','commission_rate','commission_earned','commission_received','commission_received_date','commission_os'], groupBy:'', aggregations:[], filters:[{field:'commission_os',op:'>',value:'0.005'}], sortBy:'month_date', sortDir:'asc', viewMode:'flat', charts:[] },
+  { id:'ws_premium_arrears', name:'Worksite — Premium Arrears', description:'Months where the premium due has not been paid to the insurer by the remittance date', icon:'⚠️', source:'worksite_ledger', fields:['company_name','product_name','insurer','month','members','premium_due','remit_by','paid_to_insurer','arrears','remittance_status'], groupBy:'', aggregations:[], filters:[{field:'overdue',op:'equals',value:'Yes'}], sortBy:'month_date', sortDir:'asc', viewMode:'flat', charts:[] },
+  { id:'ws_scheme_summary', name:'Worksite — Scheme Summary', description:'Premium due, paid, arrears and commission per company', icon:'📒', source:'worksite_ledger', fields:['company_name','premium_due','paid_to_insurer','arrears','commission_earned','commission_received','commission_os'], groupBy:'company_name', aggregations:[{field:'premium_due',op:'sum'},{field:'paid_to_insurer',op:'sum'},{field:'arrears',op:'sum'},{field:'commission_earned',op:'sum'},{field:'commission_received',op:'sum'},{field:'commission_os',op:'sum'}], filters:[], sortBy:'company_name', sortDir:'asc', viewMode:'aggregated', charts:[] },
+  { id:'ws_member_register', name:'Worksite — Member Register', description:'All members currently covered (payroll and individual payers) with plan, premium and nominee', icon:'👥', source:'worksite_members', fields:['company_name','product_name','full_name','nic','employee_no','department','plan','monthly_premium','sum_insured','join_date','batch','status','premium_to_anniversary','nominee_name','nominee_relationship'], groupBy:'', aggregations:[], filters:[{field:'status',op:'not equals',value:'Removed'}], sortBy:'company_name', sortDir:'asc', viewMode:'flat', charts:[] },
+  { id:'ws_leavers', name:'Worksite — Leavers & Continuations', description:'Members who left payroll — continuing individually or removed', icon:'🚪', source:'worksite_members', fields:['company_name','product_name','full_name','nic','plan','monthly_premium','join_date','status','exit_date','exit_reason'], groupBy:'', aggregations:[], filters:[{field:'status',op:'not equals',value:'Active'}], sortBy:'exit_date', sortDir:'desc', viewMode:'flat', charts:[] },
   { id:'unfinalised_quotes', name:'Not Finalised Quotations', description:'Quotes where the customer went with another company (marked not finalised) — full quote detail', icon:'⏳', source:'quotes', fields:['reference','product','client_name','customer_type','mobile','email','nic_no','address','city','district','sum_insured','vehicle_no','period_from','period_to','status','not_finalised_at','selected_company','selected_premium','insurers_sent','sent_count','insurers_responded','response_count','declined_count','lowest_premium','days_outstanding','created_by_name','created_at'], groupBy:'', aggregations:[], filters:[{field:'not_finalised',op:'equals',value:'Yes'}], sortBy:'not_finalised_at', sortDir:'desc', viewMode:'flat', charts:[] },
 ];
+
+// Flatten worksite schemes into member rows and scheme × month ledger rows.
+function flattenWorksite(wsS, wmS) {
+    const schemes=wsS?wsS.docs.map(d=>({...d.data(),id:d.id})):[];
+    const members=wmS?wmS.docs.map(d=>({...d.data(),id:d.id})):[];
+    const byScheme={}; members.forEach(m=>{ (byScheme[m.scheme_id]=byScheme[m.scheme_id]||[]).push(m); });
+    const mRows=[], lRows=[]; const today=new Date();
+    schemes.forEach(s=>{
+      const ms=byScheme[s.id]||[]; const y=currentYear(s); const rate=wsNum(s.commission_rate);
+      const ctx={ company_name:s.company_name||'', product_name:s.product_name||'', insurer:s.insurer||'', master_policy_no:s.master_policy_no||'' };
+      ms.forEach(m=>{ const p=premiumToAnniversary(m,y); mRows.push({ id:m.id, ...ctx, product_type:s.product_type||'', scheme_status:s.status||'Active', anniversary:y.to||'',
+        full_name:m.full_name||'', nic:m.nic||'', employee_no:m.employee_no||'', dob:m.dob||'', age:ageOn(m.dob)??'', gender:m.gender||'', mobile:m.mobile||'', email:m.email||'',
+        department:m.department||'', plan:m.plan||'', monthly_premium:wsNum(m.monthly_premium), sum_insured:wsNum(m.sum_insured)||'', join_date:m.join_date||'', batch:m.batch||'',
+        status:m.status||'', exit_date:m.exit_date||'', exit_reason:m.exit_reason||'', months_to_anniversary:p.months, premium_to_anniversary:p.amount,
+        commission_rate:rate, expected_commission:Math.round(p.amount*rate)/100, nominee_name:m.nominee_name||'', nominee_relationship:m.nominee_relationship||'',
+        source_type:m.source==='manual'?'Manual':'Form upload' }); });
+      const years=Array.isArray(s.policy_years)&&s.policy_years.length?s.policy_years:[y];
+      years.forEach(yr=>ledgerRows(s,ms,yr).forEach(r=>{
+        const notDue=!r.overdue&&r.arrears>0.005&&new Date(r.due_by)>=today;
+        lRows.push({ id:`${s.id}_${r.month}`, ...ctx, policy_year:`${yr.from} → ${yr.to}`, month:r.month, month_date:`${r.month}-01`,
+          members:r.members, payroll_members:r.gCount, individual_members:r.iCount, premium_due:r.due, remit_by:r.due_by,
+          paid_employer:r.remitted_group, paid_individual:r.remitted_individual, paid_to_insurer:r.remitted, paid_on:r.remitted_date, insurer_ref:r.remittance_ref,
+          arrears:r.arrears, overdue:r.overdue?'Yes':'No',
+          remittance_status:r.due<=0.005?'Nothing due':r.arrears<=0.005?'Paid':notDue?'Not yet due':r.remitted>0?'Part paid':'Unpaid',
+          commission_rate:r.rate, commission_earned:Math.round(r.commDue*100)/100, commission_received:r.commRec, commission_received_date:r.commission_received_date,
+          commission_os:Math.round(r.commOs*100)/100,
+          commission_status:r.commDue<=0.005?'—':r.commOs<=0.005?'Received':r.commRec>0?'Part received':'Outstanding' });
+      }));
+    });
+    return { mRows, lRows };
+}
 
 /* ── Pure helpers ────────────────────────────────────────────────────────── */
 function fmtNum(v) {
@@ -906,6 +1008,8 @@ const ReportsPage = () => {
   const [quotes,     setQuotes]     = useState([]);
   const [endoRows,   setEndoRows]   = useState([]);
   const [payRows,    setPayRows]    = useState([]);
+  const [wsMembers,  setWsMembers]  = useState([]);
+  const [wsLedger,   setWsLedger]   = useState([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   // Time period (by record creation date) — applied to whichever source is active.
   const [periodFrom, setPeriodFrom] = useState(null);
@@ -957,6 +1061,11 @@ const ReportsPage = () => {
       getDocs(query(collection(db,'claims'), orderBy('created_at','desc'))),
       getDocs(query(collection(db,'quotes'), orderBy('created_at','desc'))),
       getDoc(doc(db,'settings','commission_rates')),
+    ]);
+    // Worksite data is optional — a missing rules deploy must not break the other reports.
+    const [wsS,wmS]=await Promise.all([
+      getDocs(collection(db,'worksite_schemes')).catch(()=>null),
+      getDocs(collection(db,'worksite_members')).catch(()=>null),
     ]);
     // Commission rate schedules (per-product, per-date-range) from the admin
     // Commissions tab; passed to liveCommission so reports use the rate that was
@@ -1010,6 +1119,7 @@ const ReportsPage = () => {
       });
     });
     setPayRows(pRows);
+    const ws=flattenWorksite(wsS, wmS); setWsMembers(ws.mRows); setWsLedger(ws.lRows);
     setClaims(clS.docs.map(d=>{
       const c={id:d.id,...d.data()};
       // Surface the process-tracker richness (per-step notes, uploaded docs and
@@ -1096,9 +1206,9 @@ const ReportsPage = () => {
     return [...CLIENT_FIELDS, ...extras];
   }, [clients]);
 
-  const fieldsFor = (src) => src === 'clients' ? clientFields : src === 'claims' ? CLAIM_FIELDS : src === 'endorsements' ? ENDORSEMENT_FIELDS : src === 'payments' ? PAYMENT_FIELDS : QUOTE_FIELDS;
+  const fieldsFor = (src) => src === 'worksite_members' ? WORKSITE_MEMBER_FIELDS : src === 'worksite_ledger' ? WORKSITE_LEDGER_FIELDS : src === 'clients' ? clientFields : src === 'claims' ? CLAIM_FIELDS : src === 'endorsements' ? ENDORSEMENT_FIELDS : src === 'payments' ? PAYMENT_FIELDS : QUOTE_FIELDS;
   const sourceFields = fieldsFor(source);
-  const datasetFor = (src) => src === 'clients' ? clients : src === 'claims' ? claims : src === 'endorsements' ? endoRows : src === 'payments' ? payRows : quotes;
+  const datasetFor = (src) => src === 'worksite_members' ? wsMembers : src === 'worksite_ledger' ? wsLedger : src === 'clients' ? clients : src === 'claims' ? claims : src === 'endorsements' ? endoRows : src === 'payments' ? payRows : quotes;
 
   // Distinct values actually present in the data for a field, so filter values
   // can be picked from a dropdown instead of typed blind.
@@ -1106,7 +1216,7 @@ const ReportsPage = () => {
   // across renders — otherwise the value Autocomplete resets its list while you type
   // and intermittently shows "no options". The cache resets only when data/source change.
   const distinctValues = useMemo(() => {
-    const base = source === 'clients' ? clients : source === 'claims' ? claims : source === 'endorsements' ? endoRows : source === 'payments' ? payRows : quotes;
+    const base = source === 'worksite_members' ? wsMembers : source === 'worksite_ledger' ? wsLedger : source === 'clients' ? clients : source === 'claims' ? claims : source === 'endorsements' ? endoRows : source === 'payments' ? payRows : quotes;
     const cache = {};
     return (fieldKey) => {
       if (cache[fieldKey]) return cache[fieldKey];
@@ -1125,7 +1235,7 @@ const ReportsPage = () => {
       cache[fieldKey] = arr;
       return arr;
     };
-  }, [source, clients, claims, quotes, endoRows, payRows]);
+  }, [source, clients, claims, quotes, endoRows, payRows, wsMembers, wsLedger]);
 
   // Compute report results from an explicit config + the current datasets/period.
   // Used by both the Run button and by running a template directly, so a template
@@ -1138,7 +1248,9 @@ const ReportsPage = () => {
     // payments on their payment date, the rest on their creation date.
     const dateField = cfg.source==='clients' ? (cfg.periodField||periodField)
       : cfg.source==='endorsements' ? 'effective_date'
-      : cfg.source==='payments' ? 'payment_date' : 'created_at';
+      : cfg.source==='payments' ? 'payment_date'
+      : cfg.source==='worksite_members' ? 'join_date'
+      : cfg.source==='worksite_ledger' ? 'month_date' : 'created_at';
     const raw = (from||to) ? base.filter(r=>{
       const v=r[dateField]; const d=v?.toDate?v.toDate():(v?new Date(v):null);
       if(!d||isNaN(d)) return false;
@@ -1374,6 +1486,8 @@ const ReportsPage = () => {
                     <MenuItem value="payments">Payments</MenuItem>
                     <MenuItem value="claims">Claims</MenuItem>
                     <MenuItem value="quotes">Quotations</MenuItem>
+                    <MenuItem value="worksite_ledger">Worksite — Premium & Commission</MenuItem>
+                    <MenuItem value="worksite_members">Worksite — Members</MenuItem>
                   </Select>
                 </FormControl>
 

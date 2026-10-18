@@ -28,6 +28,7 @@ import AutorenewIcon from '@mui/icons-material/Autorenew';
 import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
+import BusinessCenterOutlinedIcon from '@mui/icons-material/BusinessCenterOutlined';
 import TrendingDownOutlinedIcon from '@mui/icons-material/TrendingDownOutlined';
 import RaiseTicketModal from './RaiseTicketModal';
 
@@ -38,6 +39,7 @@ const navItems = [
   { label: 'Quotations',    path: '/quotations',    icon: <RequestQuoteOutlinedIcon />, mod: 'quotations'   },
   { label: 'Underwriting',  path: '/underwriting',  icon: <PeopleOutlineIcon />,        mod: 'underwriting' },
   { label: 'Portfolio',     path: '/portfolio',     icon: <AccountTreeOutlinedIcon />,  mod: 'portfolio'    },
+  { label: 'Worksite',      path: '/worksite',      icon: <BusinessCenterOutlinedIcon />, mod: 'worksite'   },
   { label: 'Claims',        path: '/claims',        icon: <GavelOutlinedIcon />,        mod: 'claims'       },
   { label: 'Renewals',      path: '/renewals',      icon: <AutorenewIcon />,            mod: 'renewals'     },
   { label: 'Commission Structures', path: '/commission-structures', icon: <TrendingDownOutlinedIcon />, mod: 'commstructures' },

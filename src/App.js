@@ -34,6 +34,7 @@ const CommissionStructuresPage = lazy(() => import('./pages/CommissionStructures
 const ClaimsPage       = lazy(() => import('./pages/ClaimsPage'));
 const MarketingPage    = lazy(() => import('./pages/MarketingPage'));
 const PortfolioPage    = lazy(() => import('./pages/PortfolioPage'));
+const WorksitePage     = lazy(() => import('./pages/WorksitePage'));
 
 /* ── MUI theme ───────────────────────────────────────────────────────────── */
 const theme = createTheme({
@@ -575,6 +576,8 @@ function App() {
                               <Route path="/claims"        element={<ModuleGuard mod="claims"><ClaimsPage /></ModuleGuard>} />
                               <Route path="/marketing"     element={<ModuleGuard mod="marketing"><MarketingPage /></ModuleGuard>} />
                               <Route path="/portfolio"     element={<ModuleGuard mod="portfolio"><PortfolioPage /></ModuleGuard>} />
+
+                              <Route path="/worksite"      element={<ModuleGuard mod="worksite"><WorksitePage /></ModuleGuard>} />
                             </Routes>
                           </Box>
                         </Box>

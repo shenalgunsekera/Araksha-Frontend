@@ -1774,6 +1774,7 @@ export const MODULES = [
   { key: 'commstructures', label: 'Commission Structures', icon: '📉', description: 'Declining commission scales by policy year' },
   { key: 'marketing',    label: 'Marketing',          icon: '📣', description: 'WhatsApp bulk campaigns and client messaging' },
   { key: 'portfolio',    label: 'Portfolio Review',   icon: '🗂️', description: 'Customer portfolio risk assessment and recommendations' },
+  { key: 'worksite',     label: 'Worksite Products',  icon: '🏢', description: 'Voluntary group schemes — employer enrolments, premiums and commission' },
 ];
 
 export const DEFAULT_MODULE_ACCESS = {
@@ -1786,4 +1787,5 @@ export const DEFAULT_MODULE_ACCESS = {
   commstructures: ['admin', 'manager'],
   marketing:    ['admin', 'manager', 'employee'],
   portfolio:    ['admin', 'manager', 'employee'],
+  worksite:     ['admin', 'manager', 'employee'],
 };

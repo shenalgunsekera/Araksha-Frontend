@@ -11,11 +11,13 @@ import InputAdornment from '@mui/material/InputAdornment';
 import SearchIcon from '@mui/icons-material/Search';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import BusinessCenterOutlinedIcon from '@mui/icons-material/BusinessCenterOutlined';
 
 const pageMeta = {
   '/':             { title: 'Underwriting', sub: 'Policy issuance and client records',    icon: <PeopleOutlineIcon /> },
   '/underwriting': { title: 'Underwriting', sub: 'Policy issuance and client records',    icon: <PeopleOutlineIcon /> },
   '/reports':      { title: 'Reports',      sub: 'Financial summaries and analytics',     icon: <BarChartIcon /> },
+  '/worksite':     { title: 'Worksite Products', sub: 'Voluntary group schemes and enrolments', icon: <BusinessCenterOutlinedIcon /> },
 };
 
 const Header = () => {
