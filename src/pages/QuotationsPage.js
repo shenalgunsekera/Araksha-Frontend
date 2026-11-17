@@ -865,11 +865,11 @@ function QuoteRow({ quote, onSelect, onEdit, tab, onDelete, onResend, isManager,
                 }}
               />
             )}
-            {(tab === 'compare' || (tab === 'sent' && respondedCount > 0)) && (
-              <Button size="small" variant="outlined" startIcon={<CompareArrowsIcon />}
+            {onSelect && (
+              <Button size="small" variant="outlined" startIcon={respondedCount > 0 ? <CompareArrowsIcon /> : <AddIcon />}
                 onClick={e => { e.stopPropagation(); onSelect(quote); }}
                 sx={{ fontSize: 11, py: 0.4, borderColor: 'rgba(56,163,224,0.3)', color: '#38A3E0', flexShrink: 0 }}>
-                Compare
+                {respondedCount > 0 ? 'Compare' : 'Add Quotes'}
               </Button>
             )}
             {open ? <ExpandLessIcon sx={{ color: '#9CA3AF' }} /> : <ExpandMoreIcon sx={{ color: '#9CA3AF' }} />}
@@ -995,7 +995,7 @@ function parseDynamicExtras(formData, storeKey) {
 }
 
 /* ── comparison view ──────────────────────────────────────────────────────── */
-function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCTS, broker = {} }) {
+function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCTS, broker = {}, companies = [] }) {
   const product   = allProducts[quote?.product_key];
   // Locally removed responses (deleted by the broker) — filtered out immediately
   // while the Firestore write propagates.
@@ -1048,8 +1048,46 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
   const [exportingExcel,   setExportingExcel]   = useState(false);
   const [exportingPdf,     setExportingPdf]     = useState(false);
   const [exportError,      setExportError]      = useState('');
+  // Our own quotes (Araksha-entered, no email to the insurer): insurer, plan premiums,
+  // and the quotation images / PDFs. The same dialog edits any response's documents.
+  const [addInsurer,       setAddInsurer]       = useState(null);   // { company_id, company_name }
+  const [editPlans,        setEditPlans]        = useState([]);
+  const [editFiles,        setEditFiles]        = useState([]);     // [{ name, url }]
+  const [uploadingFile,    setUploadingFile]    = useState(false);
+  const [editError,        setEditError]        = useState('');
+  const isNew = !!editTarget?.__new;
+  const filesOf = (r) => (r.quote_files && r.quote_files.length) ? r.quote_files : (r.quote_file_url ? [{ name: 'Quotation', url: r.quote_file_url }] : []);
+  const blankPlans = () => Array.from({ length: Math.max(planCount, 1) }, () => ({ basic: '', tax: '', total: '' }));
+
+  const openAdd = () => {
+    setEditTarget({ __new: true });
+    setAddInsurer(null);
+    setEditForm({ commission_type: 'Standard' });
+    setEditCoverResp({});
+    setEditClauseResp({});
+    setEditPlans(blankPlans());
+    setEditFiles([]);
+    setEditError('');
+  };
+
+  const uploadQuoteFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setUploadingFile(true); setEditError('');
+    try {
+      const label = `${(isNew ? addInsurer?.company_name : editTarget?.company_name) || 'Insurer'} Quote`;
+      for (const f of files) {
+        const url = await uploadToCloudinary(f, `araksha/quote-responses/${quote.id}`, undefined, label);
+        setEditFiles(prev => [...prev, { name: f.name, url }]);
+      }
+    } catch (err) { setEditError(err?.message || 'Upload failed — please try again.'); }
+    setUploadingFile(false);
+  };
 
   const openEdit = (r) => {
+    setEditError('');
+    setEditFiles(filesOf(r));
+    setEditPlans(r.plan_premiums?.length ? r.plan_premiums.map(p => ({ basic: p.basic ?? '', tax: p.tax ?? '', total: p.total ?? '' })) : blankPlans());
     setEditTarget(r);
     setEditForm({
       basic_premium:   r.basic_premium?.toString()  || '',
@@ -1074,16 +1112,34 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
 
   const saveEdit = async () => {
     if (!editTarget) return;
-    setEditSaving(true);
+    if (isNew && !addInsurer?.company_name?.trim()) { setEditError('Choose or type the insurance company.'); return; }
+    setEditSaving(true); setEditError('');
     try {
-      const snap = await (await import('firebase/firestore')).getDoc(
-        (await import('firebase/firestore')).doc(db, 'quotes', quote.id)
-      );
+      const snap = await getDoc(doc(db, 'quotes', quote.id));
       if (snap.exists()) {
-        const updated = (snap.data().responses || []).map(r => {
-          if (r.company_id !== editTarget.company_id) return r;
+        const current = snap.data().responses || [];
+        let base = editTarget;
+        if (isNew) {
+          const name = addInsurer.company_name.trim();
+          const cid = addInsurer.company_id || `manual_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}`;
+          if (current.some(r => r.company_id === cid && !r.declined)) {
+            setEditError(`${name} already has a quote in this comparison — use ✏️ Edit on it instead.`);
+            setEditSaving(false);
+            return;
+          }
+          base = {
+            id: `${cid}_${Date.now()}`, company_id: cid, company_name: name,
+            source: 'manual', added_by: broker.broker_name || '', added_at: new Date().toISOString(),
+            submitted_at: new Date().toISOString(),
+          };
+        }
+        const plans = editPlans.map(p => {
+          const basic = Number(p.basic) || 0; const tax = Number(p.tax) || 0;
+          return { basic, tax, total: Number(p.total) || basic + tax };
+        });
+        const build = (r) => {
           const premiumFields = isPlansProduct
-            ? { plan_premiums: r.plan_premiums, premium: (r.plan_premiums || []).reduce((s, p) => s + (Number(p.total) || 0), 0) }
+            ? { plan_premiums: plans, premium: plans.reduce((s, p) => s + (Number(p.total) || 0), 0) }
             : (() => {
                 const bp = Number(editForm.basic_premium) || 0;
                 const sp = Number(editForm.srcc_premium)  || 0;
@@ -1101,21 +1157,32 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
             ...r,
             ...premiumFields,
             ...(custom_fields.length ? { custom_fields } : {}),
-            deductible:       editForm.deductible,
-            excesses:         editForm.excesses,
-            commission_type:  editForm.commission_type,
-            validity_days:    editForm.validity_days,
-            notes:            editForm.notes,
+            deductible:       editForm.deductible      || '',
+            excesses:         editForm.excesses        || '',
+            commission_type:  editForm.commission_type || '',
+            validity_days:    editForm.validity_days   || '',
+            notes:            editForm.notes           || '',
             cover_responses:  editCoverResp,
             clause_responses: editClauseResp,
-            edited_by_broker: true,
-            broker_edited_at: new Date().toISOString(),
+            quote_file_url:   editFiles[0]?.url || '',
+            quote_files:      editFiles,
+            ...(isNew ? {} : { edited_by_broker: true, broker_edited_at: new Date().toISOString() }),
           };
+        };
+        const updated = isNew
+          ? [...current, build(base)]
+          : current.map(r => (r.id === editTarget.id ? build(r) : r));
+        await updateDoc(doc(db, 'quotes', quote.id), {
+          responses: updated,
+          ...(isNew && snap.data().status === 'sent' ? { status: 'partial' } : {}),
+          updated_at: serverTimestamp(),
         });
-        await updateDoc(doc(db, 'quotes', quote.id), { responses: updated, updated_at: serverTimestamp() });
       }
       setEditTarget(null);
-    } catch (err) { console.error('Edit save failed:', err); }
+    } catch (err) {
+      console.error('Edit save failed:', err);
+      setEditError(err?.message || 'Could not save — please try again.');
+    }
     setEditSaving(false);
   };
 
@@ -1524,6 +1591,10 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
         </Typography>
         <Chip label={product?.label} sx={{ bgcolor: 'rgba(37,94,171,0.08)', color: '#255EAB', fontWeight: 700 }} />
         <Box sx={{ flex: 1 }} />
+        <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openAdd}
+          sx={{ fontSize: 12, background: 'linear-gradient(135deg,#255EAB,#38A3E0)' }}>
+          Add Our Own Quote
+        </Button>
         <Button variant="outlined" size="small"
           startIcon={exportingExcel ? <CircularProgress size={12} color="inherit" /> : <FileDownloadOutlinedIcon />}
           onClick={exportExcel} disabled={exportingExcel}
@@ -1592,7 +1663,14 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
 
       {responses.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 6 }}>
-          <Typography sx={{ color: '#9CA3AF' }}>No responses received yet for this quote.</Typography>
+          <Typography sx={{ color: '#9CA3AF', mb: 2 }}>No quotes in this comparison yet.</Typography>
+          <Typography sx={{ color: '#6B7280', fontSize: 13, mb: 2 }}>
+            Got a quotation by phone, WhatsApp or in person? Add it here with a photo or PDF of the quotation — no email needed.
+          </Typography>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}
+            sx={{ background: 'linear-gradient(135deg,#255EAB,#38A3E0)' }}>
+            Add Our Own Quote
+          </Button>
         </Box>
       ) : (
         <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid rgba(56,163,224,0.12)', borderRadius: '14px', mb: 3 }}>
@@ -1614,12 +1692,15 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
                       <Typography sx={{ fontWeight: 800, fontSize: 13 }}>{r.company_name}</Typography>
                       {isSelected && <Box component="span" sx={{ fontSize: 10, color: '#059669', fontWeight: 700, bgcolor: 'rgba(16,185,129,0.12)', px: 1, py: 0.2, borderRadius: '10px', display: 'inline-block', mt: 0.3 }}>🏆 Customer's Choice</Box>}
 
-                      {r.quote_file_url && (
-                        <Button size="small" onClick={() => openFile(r.quote_file_url)}
-                          sx={{ fontSize: 10, p: 0, color: '#6366f1', minWidth: 'auto' }}>
-                          View Quote ↗
-                        </Button>
+                      {r.source === 'manual' && (
+                        <Typography sx={{ fontSize: 10, color: '#255EAB', fontWeight: 700 }}>Added by Araksha{r.added_by ? ` · ${r.added_by}` : ''}</Typography>
                       )}
+                      {filesOf(r).map((fl, i, all) => (
+                        <Button key={fl.url} size="small" onClick={() => openFile(fl.url)}
+                          sx={{ fontSize: 10, p: 0, color: '#6366f1', minWidth: 'auto', display: 'block', mx: 'auto' }}>
+                          {all.length > 1 ? `View Quote ${i + 1} ↗` : 'View Quote ↗'}
+                        </Button>
+                      ))}
                     </Box>
                   </TableCell>
                   );
@@ -1931,17 +2012,68 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
       <Dialog open={!!editTarget} onClose={() => setEditTarget(null)} maxWidth="md" fullWidth
         PaperProps={{ sx: { maxHeight: '90vh' } }}>
         <DialogTitle sx={{ pb: 1, fontWeight: 800 }}>
-          ✏️ Edit Response — {editTarget?.company_name}
+          {isNew ? '➕ Add Our Own Quote' : `✏️ Edit Response — ${editTarget?.company_name || ''}`}
         </DialogTitle>
         <DialogContent dividers sx={{ pt: 2 }}>
           <Alert severity="info" sx={{ mb: 2.5, fontSize: 12 }}>
-            All changes are saved directly to the comparison. A "Broker edited" note will appear on this response.
+            {isNew
+              ? 'Enter a quotation you received yourself (phone, WhatsApp, visit). Nothing is emailed — it is added straight to this comparison and appears in the Excel, PDF and customer email.'
+              : 'All changes are saved directly to the comparison. A "Broker edited" note will appear on this response.'}
           </Alert>
+          {editError && <Alert severity="error" sx={{ mb: 2, fontSize: 12 }} onClose={() => setEditError('')}>{editError}</Alert>}
+
+          {isNew && (
+            <>
+              <Typography sx={{ fontSize: 11, fontWeight: 800, color: '#255EAB', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5 }}>
+                Insurance Company
+              </Typography>
+              <Autocomplete freeSolo size="small" sx={{ mb: 2.5 }}
+                options={companies.map(c => ({ company_id: c.id, company_name: c.name || c.company_name || '' })).filter(c => c.company_name)}
+                getOptionLabel={o => (typeof o === 'string' ? o : o.company_name)}
+                isOptionEqualToValue={(o, v) => o.company_id === v.company_id}
+                value={addInsurer}
+                onChange={(e, v) => setAddInsurer(typeof v === 'string' ? { company_id: '', company_name: v } : v)}
+                onInputChange={(e, v, reason) => { if (reason === 'input') setAddInsurer(prev => (prev && prev.company_name === v ? prev : { company_id: '', company_name: v })); }}
+                renderInput={params => <TextField {...params} label="Choose from your insurers, or type a name" />} />
+            </>
+          )}
+
+          {/* Quotation documents (images / PDFs) */}
+          <Typography sx={{ fontSize: 11, fontWeight: 800, color: '#255EAB', textTransform: 'uppercase', letterSpacing: 1, mb: 1 }}>
+            Quotation Images / PDFs
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 2.5 }}>
+            {editFiles.map((fl, i) => (
+              <Chip key={fl.url} size="small" label={fl.name || `Quotation ${i + 1}`} onClick={() => openFile(fl.url)}
+                onDelete={() => setEditFiles(prev => prev.filter(x => x.url !== fl.url))}
+                sx={{ bgcolor: 'rgba(99,102,241,0.08)', color: '#4F46E5', fontWeight: 600, maxWidth: 260 }} />
+            ))}
+            <Button size="small" variant="outlined" component="label" disabled={uploadingFile}
+              startIcon={uploadingFile ? <CircularProgress size={12} color="inherit" /> : <AddIcon />}
+              sx={{ fontSize: 12, borderColor: 'rgba(37,94,171,0.4)', color: '#255EAB' }}>
+              {uploadingFile ? 'Uploading…' : editFiles.length ? 'Add more' : 'Upload quotation'}
+              <input hidden type="file" multiple accept="image/*,application/pdf"
+                onChange={e => { const fl = e.target.files; uploadQuoteFiles(fl); e.target.value = ''; }} />
+            </Button>
+            {!editFiles.length && <Typography sx={{ fontSize: 11.5, color: '#9CA3AF' }}>Photos or PDFs of the insurer's quotation (optional, up to 20 MB each)</Typography>}
+          </Box>
 
           {/* Premium Breakdown */}
           <Typography sx={{ fontSize: 11, fontWeight: 800, color: '#255EAB', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5 }}>
             Premium Breakdown
           </Typography>
+          {isPlansProduct && editPlans.map((p, pi) => (
+            <Box key={pi} sx={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 1fr', gap: 1.5, alignItems: 'center', mb: 1.5 }}>
+              <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#0891b2' }}>Plan {pi + 1}</Typography>
+              {[['basic', 'Basic Premium (LKR)'], ['tax', 'Tax (LKR)'], ['total', 'Plan Total (LKR)']].map(([k, label]) => (
+                <TextField key={k} size="small" type="number" label={label}
+                  placeholder={k === 'total' ? 'Basic + Tax' : ''}
+                  value={p[k] ?? ''}
+                  onChange={e => setEditPlans(prev => prev.map((x, i) => (i === pi ? { ...x, [k]: e.target.value } : x)))} />
+              ))}
+            </Box>
+          ))}
+          {!isPlansProduct && (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 2.5 }}>
             {premRows.map(({ key, label }) => (
               <TextField key={key} size="small" fullWidth label={label} type="number"
@@ -1955,6 +2087,7 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
                 onChange={e => setEditForm(f => ({ ...f, [cf.key]: e.target.value }))} />
             ))}
           </Box>
+          )}
 
           {/* Deductibles / Excesses / Validity */}
           <Typography sx={{ fontSize: 11, fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5 }}>
@@ -2058,9 +2191,9 @@ function ComparisonView({ quote, onBack, onConfirm, allProducts = STATIC_PRODUCT
         <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
           <Button variant="outlined" onClick={() => setEditTarget(null)}
             sx={{ borderColor: '#e0e0e0', color: '#6B7280' }}>Cancel</Button>
-          <Button variant="contained" onClick={saveEdit} disabled={editSaving}
+          <Button variant="contained" onClick={saveEdit} disabled={editSaving || uploadingFile}
             sx={{ background: 'linear-gradient(135deg,#6366f1,#818cf8)', minWidth: 130 }}>
-            {editSaving ? 'Saving…' : 'Save All Changes'}
+            {editSaving ? 'Saving…' : isNew ? 'Add to Comparison' : 'Save All Changes'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -2891,7 +3024,7 @@ const QuotationsPage = () => {
 
         {/* Compare view */}
         {compareQuote ? (
-          <ComparisonView quote={compareQuote} onBack={() => setCompareQuote(null)} onConfirm={handleConfirmQuote} allProducts={allP} broker={brokerInfo} />
+          <ComparisonView quote={quotes.find(q => q.id === compareQuote.id) || compareQuote} onBack={() => setCompareQuote(null)} onConfirm={handleConfirmQuote} allProducts={allP} broker={brokerInfo} companies={companies} />
         ) : (
           <>
             <Tabs value={tab} onChange={(_, v) => { setTab(v); setQPage(1); }} sx={{
